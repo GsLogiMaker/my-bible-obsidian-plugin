@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "gslogimaker-my-bible",
+	"name": "My Bible",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"author": "GsLogimaker",
+	"authorUrl": "https://github.com/GsLogiMaker",
+	"fundingUrl": "https://www.buymeacoffee.com/gslogimake0",
 	"isDesktopOnly": false
 }
