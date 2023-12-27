@@ -1,7 +1,7 @@
 {
 	"name": "gslogimaker-my-bible",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Your own customizable bible for your personal vault!",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

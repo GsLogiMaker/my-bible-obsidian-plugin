@@ -37,6 +37,7 @@ interface ProceduralNotesSettings {
 	padded_chapter: boolean;
 	verse_body_format: string;
 	chapter_body_format: string;
+	store_locally: boolean;
 }
 
 const DEFAULT_SETTINGS: ProceduralNotesSettings = {
@@ -57,6 +58,7 @@ const DEFAULT_SETTINGS: ProceduralNotesSettings = {
 		+ "\n"
 		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]"
 		+ "\n",
+	store_locally: false,
 	
 }
 
@@ -65,12 +67,6 @@ function httpGet(theUrl: string):Promise<string> {
 	return new Promise(async (ok, err) => {
 		ok(await requestUrl(theUrl).text);
 	});
-	// return new Promise((ok, err) => {
-	// 	var xmlHttp = new XMLHttpRequest();
-	// 	xmlHttp.open( "GET", theUrl, true ); // false for synchronous request
-	// 	xmlHttp.send( null );
-	// 	ok(xmlHttp.responseText);
-	// });
 }
 
 
@@ -84,8 +80,10 @@ export default class ProceduralNotes extends Plugin {
 		await this.loadSettings();
 
 		this.bible_api = new BollsLifeBibleAPI();
-		let translation_data = await this.bible_api.get_books("YLT");
-
+		this.bible_api.plugin = this;
+		let translation_data = await this.bible_api
+			.get_books(this.settings.translation);
+		
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: 'create_bible_files',
@@ -165,6 +163,14 @@ export default class ProceduralNotes extends Plugin {
 				}
 			}
 		});
+
+		this.addCommand({
+			id: 'clear_cache',
+			name: 'Clear Local Cache',
+			callback: async () => {
+				this.bible_api.clear_cache();
+			}
+		});
 		
 		this.registerMarkdownCodeBlockProcessor("verse", async (source, element, context) => {
 			const ref = source.replace(":", " ").split(" ");
@@ -178,9 +184,8 @@ export default class ProceduralNotes extends Plugin {
 			});
 		  });
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SettingsTab(this.app, this));
 
+		  this.addSettingTab(new SettingsTab(this.app, this));
 	}
 
 	onunload() {
@@ -281,15 +286,19 @@ interface BollsLifeChapterCache {
 	mutex: Mutex;
 }
 
-type BollsLifeChapterData = Array<BollsLifeVerseData>;
+type BollsLifeChapterData = Array<string>;
 
 interface BollsLifeVerseData {
-	pk: number;
-	verse: number;
-	text: string;
+	pk: string,
+	text: string,
+	verse: number,
 };
 
 interface BibleAPI {
+	plugin: ProceduralNotes;
+
+	clear_cache(): void;
+
 	get_books(translation:string,): Promise<Array<BollsLifeBookData>>;
 
 	get_translations(): Promise<Translations>;
@@ -314,6 +323,7 @@ interface Translation {
 
 const CHAPTER_CACHE_SIZE = 25;
 class BollsLifeBibleAPI implements BibleAPI {
+	plugin: ProceduralNotes;
 	chapter_cache: Record<ChapterKey, BollsLifeChapterCache> = {};
 	translations: Translations = {};
 	translation_map: Array<BollsLifeBookData> = [];
@@ -329,9 +339,9 @@ class BollsLifeBibleAPI implements BibleAPI {
 		)));
 	}
 	
-	async _book_to_id(book: string): Promise<number> {
+	async _book_to_id(translation: string, book: string): Promise<number> {
 		let book_ = book.toLocaleLowerCase();
-		let map = await this._get_translation_map("YLT");
+		let map = await this._get_translation_map(translation);
 		for (let i in map) {
 			let book_data = map[i];
 			if (book_ == book_data["name"].toLocaleLowerCase()) {
@@ -358,31 +368,66 @@ class BollsLifeBibleAPI implements BibleAPI {
 			});
 
 			await this._cache_clear_timer;
-			this.chapter_cache = {};
-			this._cache_clear_timer = null;
+			this.clear_cache();
 		}
 	}
 
 	async _get_chapter_cached(translation:string, book:string, chapter:Number): Promise<BollsLifeChapterData> {
-		let book_id = await this._book_to_id(book);
+		let book_id = await this._book_to_id(translation, book);
 		let chapter_key = this._chapter_key(translation, book, chapter);
 
 		if (!(chapter_key in this.chapter_cache)) {
 			this._cache_chapter(translation, book, chapter, null);
 		}
 
-		var chapter_data = this.chapter_cache[chapter_key];
-		if (chapter_data.chapter_data === null) {
+		var cached = this.chapter_cache[chapter_key];
+
+		if (cached.chapter_data === null && this.plugin.settings.store_locally) {
+			
+		}
+
+
+		if (cached.chapter_data === null) {
 			// Fetch chapter from the web
-			await chapter_data.mutex
+			await cached.mutex
 				.acquire()
 				.then(async () => {
-					chapter_data.chapter_data = JSON.parse(await httpGet(
-						"https://bolls.life/get-chapter/{0}/{1}/{2}/"
-							.format(translation, String(book_id), String(chapter))
-					));
-					chapter_data.mutex.cancel();
-					chapter_data.mutex.release();
+					if (this.plugin.settings.store_locally) {
+						// Attempt to load chapter locally
+						let cached_file_name = "{0} {1} {2}.txt"
+							.format(translation, book, String(chapter));
+						let cached_file_path = normalizePath("/.mybiblecache/"+cached_file_name);
+						this.plugin.app.vault.adapter.mkdir("/.mybiblecache");
+						if (await this.plugin.app.vault.adapter.exists(cached_file_path)) {
+							cached.chapter_data = JSON.parse(
+								await this.plugin.app.vault.adapter.read(cached_file_path)
+							);
+							console.log("LOADED", cached_file_path);
+						}
+					}
+
+					if (cached.chapter_data === null) {
+						// Fetch chapter from endpoint
+						cached.chapter_data = JSON.parse(await httpGet(
+							"https://bolls.life/get-chapter/{0}/{1}/{2}/"
+								.format(translation, String(book_id), String(chapter))
+						)).map((x:BollsLifeVerseData) => x.text);
+
+						if (this.plugin.settings.store_locally) {
+							// Save chapter locally
+							let cached_file_name = "{0} {1} {2}.txt"
+								.format(translation, book, String(chapter));
+							let cached_file_path = "/.mybiblecache/"+cached_file_name;
+							this.plugin.app.vault.adapter.mkdir(".mybiblecache");
+							await this.plugin.app.vault.adapter.write(
+								cached_file_path,
+								JSON.stringify(cached.chapter_data),
+							);
+						}
+					}
+
+					cached.mutex.cancel();
+					cached.mutex.release();
 				})
 				.catch(err => {
 					if (err === E_CANCELED) {
@@ -391,11 +436,11 @@ class BollsLifeBibleAPI implements BibleAPI {
 				});
 		}
 
-		if (chapter_data.chapter_data === null || chapter_data.chapter_data.length == 0) {
+		if (cached.chapter_data === null || cached.chapter_data.length == 0) {
 			throw new Error('Chapter data is null.');
 		}
 
-		return chapter_data.chapter_data;
+		return cached.chapter_data;
 	}
 
 	async _get_translation_map(translation:string): Promise<Array<BollsLifeBookData>> {
@@ -407,6 +452,14 @@ class BollsLifeBibleAPI implements BibleAPI {
 		return this.translation_map;
 	}
 
+	async clear_cache() {
+		this.chapter_cache = {};
+		this._cache_clear_timer = null;
+		if (this.plugin.app.vault.getAbstractFileByPath("/.mybiblecache") !== null) {
+			await this.plugin.app.vault.adapter.rmdir("/.mybiblecache", true);
+		}
+	}
+
 	async get_books(translation: string): Promise<BollsLifeBookData[]> {
 		if (this.translation_map.length == 0) {
 			await this._generate_translation_map(translation);
@@ -415,9 +468,7 @@ class BollsLifeBibleAPI implements BibleAPI {
 	}
 
 	async get_translations(): Promise<Translations> {
-		console.log(this.translations);
 		if (Object.keys(this.translations).length === 0) {
-			console.log("FETCHING");
 			let list = JSON.parse(await httpGet(
 				"https://bolls.life/static/bolls/app/views/languages.json"
 			));
@@ -449,7 +500,7 @@ class BollsLifeBibleAPI implements BibleAPI {
 			chapter,
 		);
 		
-		return chapter_data[verse-1].text;
+		return chapter_data[verse-1];
 	}
 }
 
@@ -484,11 +535,14 @@ class SettingsTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Translation')
-			.setDesc('TODO')
+			.setDesc('The version of the Bible to display.')
 			.addDropdown(async drop => {
 				let translations = await this.plugin.bible_api.get_translations();
 				for (const key in translations) {
-					drop.addOption(key, translations[key].display_name);
+					drop.addOption(
+						key,
+						"{0} - {1} - {2}".format(translations[key].language, key, translations[key].display_name)
+					);
 				}
 				drop.setValue(DEFAULT_SETTINGS.translation);
 				drop.onChange(async value => {
@@ -570,6 +624,16 @@ class SettingsTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.chapter_body_format)
 				.onChange(async (value) => {
 					this.plugin.settings.chapter_body_format = value;
+					await this.plugin.saveSettings();
+				}))
+		
+		new Setting(containerEl)
+			.setName('Save Bible Locally')
+			.setDesc('When *ON*, saves every downloaded chapter in a local file, so that it can be accessed without an internet connection.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.store_locally)
+				.onChange(async (value) => {
+					this.plugin.settings.store_locally = value;
 					await this.plugin.saveSettings();
 				}))
 	}
