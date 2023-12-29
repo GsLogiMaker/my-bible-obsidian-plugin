@@ -35,4 +35,9 @@ My Bible sets up a folder structure and populates it with one note per chapter. 
 ### Troubleshooting
 If you have issues with the plugin [please report them here](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new).
 
+### Donations
+If you'd like to support my work, you can do so here!
+<a href="https://www.buymeacoffee.com/gslogimake0" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
+
+
 Enjoy My Bible! God bless!
