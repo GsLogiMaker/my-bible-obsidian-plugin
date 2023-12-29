@@ -103,15 +103,15 @@ export default class ProceduralNotes extends Plugin {
 
 		this.addCommand({
 			id: 'clear_cache',
-			name: 'Clear Local Cache',
+			name: 'Clear Cache',
 			callback: async () => {
-				this.bible_api.clear_cache();
+				new ClearCacheFilesModal(this.app, this).open();
 			}
 		});
 
 		this.addCommand({
 			id: 'download_bible',
-			name: 'Download Whole Bible',
+			name: 'Download Translation',
 			callback: async () => {
 				// TODO: Open a dialogue to confirm downloading an entire bible
 				new DownloadBibleModal(
@@ -322,11 +322,7 @@ class BibleAPI {
 	cache_clear_timer:Promise<null>|null = null;
 	chapter_cache: Record<ChapterKey, BollsLifeChapterCache> = {};
 	plugin: ProceduralNotes;
-
-	clear_cache(): void {
-		throw new Error("unimplemented")
-	};
-
+	
 	async cache_chapter(
 		translation:string,
 		book:string,
@@ -369,6 +365,19 @@ class BibleAPI {
 			this.cache_clear_timer.then(() => this.clear_cache());
 		}
 	}
+
+	async clear_cache() {
+		this.chapter_cache = {};
+		this.cache_clear_timer = null;
+
+		let cache_path = normalizePath("/.mybiblecache/");
+		if (await this.plugin.app.vault.adapter.exists(cache_path)) {
+			if (!await this.plugin.app.vault.adapter.trashSystem(cache_path)) {
+				await this.plugin.app.vault.adapter.trashLocal(cache_path);
+			}
+		}
+	}
+
 
 	async get_bible(tranlsation:string): Promise<BollsLifeBibleData> {
 		throw new Error("unimplemented")
@@ -561,14 +570,6 @@ class BollsLifeBibleAPI extends BibleAPI {
 		return this.translation_map;
 	}
 
-	async clear_cache() {
-		this.chapter_cache = {};
-		this.cache_clear_timer = null;
-		if (this.plugin.app.vault.getAbstractFileByPath("/.mybiblecache") !== null) {
-			await this.plugin.app.vault.adapter.rmdir("/.mybiblecache", true);
-		}
-	}
-
 	async get_bible(translation:string): Promise<BollsLifeBibleData> {
 		let verses = JSON.parse(
 			await httpGet(
@@ -650,6 +651,55 @@ class BollsLifeBibleAPI extends BibleAPI {
 		);
 		
 		return chapter_data[verse-1];
+	}
+}
+
+class ClearCacheFilesModal extends Modal {
+	plugin: ProceduralNotes;
+
+	constructor(app: App, plugin:ProceduralNotes) {
+		super(app);
+		this.plugin = plugin;
+	}
+
+	onOpen() {
+		const {contentEl} = this;
+		
+		let bible_path = this.plugin.settings.bible_folder;
+		
+		contentEl.createEl("h1", { text: "Clear Cache?" });
+		contentEl.createEl("span", {
+			text: "You are about to clear out all cached chapters from your file system. This includes translations you manually downloaded."
+				.format(bible_path)
+		});
+		contentEl.createEl("p", {
+			text: "Do you want to clear the cache?"
+		});
+		contentEl.createEl("p", {});
+
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn
+				.setButtonText("Cancel")
+				.onClick(() => {
+					this.close();
+				})
+			)
+			.addButton((btn) =>
+				btn
+				.setButtonText("Clear Cache")
+				.setCta()
+				.onClick(async () => {
+					this.close();
+					await this.plugin.bible_api.clear_cache();
+					new Notice("Cache cleared!");
+				})
+			);
+	}
+
+	onClose() {
+		const {contentEl} = this;
+		contentEl.empty();
 	}
 }
 
