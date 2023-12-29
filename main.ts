@@ -1100,7 +1100,7 @@ class SettingsTab extends PluginSettingTab {
 					this.plugin.settings.translation = value;
 					await this.plugin.saveSettings();
 				})
-				drop.setValue(DEFAULT_SETTINGS.translation);
+				drop.setValue(this.plugin.settings.translation);
 			});
 		
 		new Setting(containerEl)
