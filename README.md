@@ -18,16 +18,16 @@ My Bible is designed to make it easy for you to have the Bible in your vault. Wh
 My Bible is designed for any and all Christians who want to study the bible, and reference it in their notes. I believe everyone should have access to good notes for their studies, so My Bible is made to be quick and easy to set up in, even if you are not tech-savvy or an Obsidian super-user.
 
 ### How it works
-My Bible sets up a folder structure and populates it with one note per chapter. The chapters don't contain the text of the Bible; the text is inserted as you read it, allowing you to have any translation you want represented by the same file/chapter/note. Because of this, you don't even need to download the entire Bible (unless you want to.)
+My Bible sets up a folder structure and populates it with one note per chapter. The chapters don't contain the text of the Bible; the text is inserted as you read it, allowing you to have any translation you want, represented by the same file/chapter/note. Because of this, you don't even need to download the entire Bible (unless you want to.)
 
 ### Getting started
 1. Download the plugin from the *Community Plugins* list in the Obsidian settings.
-2. Head to the settings for *My Bible* and change them how you like (you can do this later if you like.)
-3. Press `ctrl+p` then search for and select the command `Build Bible`.
-4. Start linking notes to the Bible!
+2. Activate *My Bible* in the *Community Plugins* tab in *Settings*.
+3. Head to the settings for *My Bible* and change them how you like (you can do this later if you like.)
+4. Press `ctrl+p` to open the command list, then search for and select the command `Build Bible`.
+5. Start linking notes to the Bible!
 
 ### Commands
-
 * `Build Bible` - Builds the file structure for the Bible within your vault.
 * `Download Translation` - Downloads the translation from your settings to be used offline.
 * `Clear Cache` - Removes all cached chapters from your file system, including translations you downloaded.
