@@ -90,6 +90,47 @@ function httpGet(theUrl: string):Promise<string> {
 	});
 }
 
+function is_alpha(string:string): boolean {
+	for (let char_str of string) {
+		let char = char_str.charCodeAt(0);
+		if ((char > 64 && char < 91) || (char > 96 && char < 123)) {
+			// Character is a capital or lowercase letter, continue
+			continue;
+		}
+		// Character is not a capital or lowercase letter, return false
+		return false;
+	}
+	// All characters were uppercase or lowercase letters, return true
+	return true;
+}
+
+function is_alphanumeric(string:string): boolean {
+	for (let char_str of string) {
+		let char = char_str.charCodeAt(0);
+		if ((char > 64 && char < 91) || (char > 96 && char < 123) || (char > 47 && char < 58)) {
+			// Character is a capital or lowercase letter, continue
+			continue;
+		}
+		// Character is not a capital or lowercase letter, return false
+		return false;
+	}
+	// All characters were uppercase or lowercase letters, return true
+	return true;
+}
+
+function is_numeric(string:string): boolean {
+	for (let char_str of string) {
+		let char = char_str.charCodeAt(0);
+		if (char > 47 && char < 58) {
+			// Character is a number, continue
+			continue;
+		}
+		// Character is not number, return false
+		return false;
+	}
+	// All characters were numbers, return true
+	return true;
+}
 
 
 
@@ -104,9 +145,6 @@ export default class ProceduralNotes extends Plugin {
 		this.bible_api.plugin = this;
 
 		await this.settings.set_translation(this.settings.translation, this);
-
-		let translation_data = await this.bible_api
-			.get_books(this.settings.translation);
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
@@ -146,15 +184,127 @@ export default class ProceduralNotes extends Plugin {
 		});
 		
 		this.registerMarkdownCodeBlockProcessor("verse", async (source, element, context) => {
-			const ref = source.replace(":", " ").split(" ");
-			const verse_body = element.createSpan({
-				text: await this.bible_api.get_verse(
-					this.settings.translation,
-					ref[0],
-					Number(ref[1]),
-					Number(ref[2]),
-				),
-			});
+			const ref = source.replace(/[:-]/g, " ").split(" ");
+
+			let book = "";
+			let chapter = -1;
+			let verse = -1;
+			let verse_end = -1;
+			let maybe_translation:string|null = null;
+			let i = 0;
+
+			while (i != ref.length) {
+				// Compose book name
+				if (i == 0) {
+					// Always add first item, no matter what it is
+					book += ref[i];
+				} else {
+					// Only add items that are words, and not numbers
+					if (!is_alpha(ref[i])) {
+						break;
+					}
+					book += " " + ref[i]
+				}
+
+				i += 1;
+			}
+
+			if (i != ref.length && is_numeric(ref[i])) {
+				// Compose chapter
+				chapter = Number(ref[i]);
+				i += 1;
+			}
+
+			if (i != ref.length && is_numeric(ref[i])) {
+				// Compose verse
+				verse = Number(ref[i]);
+				i += 1;
+			}
+
+			console.log(ref[i]);
+			if (i != ref.length && is_numeric(ref[i])) {
+				// Compose range
+				verse_end = Number(ref[i]);
+				i += 1;
+				console.log(ref[i]);
+			}
+
+			if (i != ref.length && is_alphanumeric(ref[i])) {
+				// Compose translation
+				maybe_translation = ref[i];
+				i += 1;
+			}
+
+			let translation = maybe_translation || this.settings.translation;
+
+			if (book.length === 0) {
+				element.createSpan({
+					text: "[Book and chapter must be provided]",
+				});
+			} else if (chapter === -1) {
+				element.createSpan({
+					text: "[Chapter must be provided]",
+				});
+			} else if (verse === -1) {
+				let verses = await this.bible_api.get_chapter_cached(
+					translation,
+					book,
+					chapter,
+				);
+				let text = "";
+				for (let verse_i of verses.keys()) {
+					let verse = verses[verse_i];
+					text += ""+(verse_i+1)+" "+verse;
+					if (verse_i != verses.length-1) {
+						text += "\n";
+					}
+				}
+				if (text.length === 0) {
+					text = "[Could not find text for the book '{1}', translation '{2}', chapter {0}]"
+						.format(String(chapter), book, translation)
+				}
+				element.createSpan({
+					text: text,
+				});
+			} else if (verse_end < verse) {
+				let text = await this.bible_api.get_verse(
+					translation,
+					book,
+					chapter,
+					verse,
+				);
+				console.log(text);
+				if (text.length === 0) {
+					text = "[Could not find text for the book '{1}', translation '{3}', chapter {0}, verse {2}]"
+						.format(String(chapter), book, String(verse), translation)
+				}
+				element.createSpan({
+					text: text,
+				});
+			} else {
+				let verses = await this.bible_api.get_chapter_cached(
+					translation,
+					book,
+					chapter,
+				);
+				let text = "";
+				let j = verse;
+				while (j < verse_end+1 && j < verses.length) {
+					text += "" + j + " " + verses[j-1];
+					if (j != verse_end) {
+						text += "\n";
+					}
+					j += 1;
+				}
+				if (text.length === 0) {
+					text = "[Could not find text for the book '{1}', translation '{4}', chapter {0}, verses {2}-{3}]"
+						.format(String(chapter), book, String(verse), String(verse_end), translation)
+				}
+				element.createSpan({
+					text: text,
+				});
+			}
+			
 		  });
 
 
@@ -166,10 +316,10 @@ export default class ProceduralNotes extends Plugin {
 	}
 
 	async build_bible(bible_path:string) {
-		let translation_data = await this.bible_api
-			.get_books(this.settings.translation);
+		// TODO: Build bibles according to translation in settings
+		let books = await this.bible_api.get_books("YLT");
 
-		for (let book_meta of translation_data) {
+		for (let book_meta of books) {
 			// Loop over books
 			let book_id = book_meta.order;
 
@@ -344,6 +494,7 @@ interface BollsLifeVerseData {
 
 class BibleAPI {
 	cache_clear_timer:Promise<null>|null = null;
+	cache_clear_timer_promise_err:(reason?:any) => void;
 	chapter_cache: Record<ChapterKey, BollsLifeChapterCache> = {};
 	plugin: ProceduralNotes;
 	
@@ -365,10 +516,13 @@ class BibleAPI {
 
 		// Save chapter to local file sytem
 		if (save_locally) {
-			this.plugin.app.vault.adapter.mkdir(".mybiblecache");
+			let cache_path = this.get_cache_path();
+			this.plugin.app.vault.adapter.mkdir(cache_path);
 			let cached_file_name = "{0} {1} {2}.txt"
 				.format(translation, book, String(chapter));
-			let cached_file_path = "/.mybiblecache/"+cached_file_name;
+			let cached_file_path = normalizePath(
+				cache_path + "/" + cached_file_name,
+			);
 			if (
 				chapter_data != null
 				&& !await this.plugin.app.vault.adapter.exists(cached_file_path)
@@ -380,21 +534,25 @@ class BibleAPI {
 			}
 		}
 
-		if (this.cache_clear_timer === null) {
-			// Start cache clear timer
-			this.cache_clear_timer = new Promise((ok, err) => {
-				setTimeout(ok, 60000*60*24) // Timeout after 24 hours
-			});
-
-			this.cache_clear_timer.then(() => this.clear_cache());
+		// Start/refresh cache clear timer
+		if (this.cache_clear_timer !== null && this.cache_clear_timer_promise_err !== null) {
+			// Clear out old promise
+			this.cache_clear_timer_promise_err(null);
 		}
+		this.cache_clear_timer = new Promise((ok, err) => {
+			this.cache_clear_timer_promise_err = err;
+			setTimeout(ok, 60000*60) // Timeout after 1 hour
+		});
+		this.cache_clear_timer
+			.then(() => this.clear_cache())
+			.catch(err => {});
 	}
 
 	async clear_cache() {
 		this.chapter_cache = {};
 		this.cache_clear_timer = null;
 
-		let cache_path = normalizePath("/.mybiblecache/");
+		let cache_path = this.get_cache_path();
 		if (await this.plugin.app.vault.adapter.exists(cache_path)) {
 			if (!await this.plugin.app.vault.adapter.trashSystem(cache_path)) {
 				await this.plugin.app.vault.adapter.trashLocal(cache_path);
@@ -403,12 +561,16 @@ class BibleAPI {
 	}
 
 
-	async get_bible(tranlsation:string): Promise<BollsLifeBibleData> {
+	async get_bible(translation:string): Promise<BollsLifeBibleData> {
 		throw new Error("unimplemented")
 	}
 
 	get_books(translation:string,): Promise<Array<BollsLifeBookData>> {
 		throw new Error("unimplemented")
+	}
+
+	get_cache_path(): string {
+		return normalizePath(this.plugin.manifest.dir + "/.mybiblecache");
 	}
 
 	async get_chapter_cached(
@@ -438,10 +600,11 @@ class BibleAPI {
 						// Attempt to load chapter locally
 						let cached_file_name = "{0} {1} {2}.txt"
 							.format(translation, book, String(chapter));
+						let cache_path = this.get_cache_path();
+						this.plugin.app.vault.adapter.mkdir(cache_path);
 						let cached_file_path = normalizePath(
-							"/.mybiblecache/"+cached_file_name
+							cache_path + "/" + cached_file_name
 						);
-						this.plugin.app.vault.adapter.mkdir("/.mybiblecache");
 						if (
 							await this.plugin.app.vault.adapter
 								.exists(cached_file_path)
@@ -534,7 +697,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 	plugin: ProceduralNotes;
 	chapter_cache: Record<ChapterKey, BollsLifeChapterCache> = {};
 	translations: Translations = {};
-	translation_map: Array<BollsLifeBookData> = [];
+	translation_maps: Record<string, Array<BollsLifeBookData>> = {};
 	cache_clear_timer:Promise<null>|null = null;
 
 	_chapter_key(translation:string, book:string, chapter:Number) {
@@ -553,12 +716,12 @@ class BollsLifeBibleAPI extends BibleAPI {
 				order: item["bookid"],
 			});
 		}
-		this.translation_map = book_data;
+		this.translation_maps[translation] = book_data;
 	}
 	
 	async _book_to_id(translation: string, book: string): Promise<number> {
 		let book_ = book.toLocaleLowerCase();
-		let map = await this._get_translation_map(translation);
+		let map = await this._get_translation_map("YLT"); // TODO: Make translation according to user settings
 		for (let i in map) {
 			let book_data = map[i];
 			if (book_ == book_data["name"].toLocaleLowerCase()) {
@@ -569,7 +732,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 	}
 
 	async _id_to_book(translation:string, book_id: number): Promise<string> {
-		let map = await this._get_translation_map(translation);
+		let map = await this._get_translation_map("YLT"); // TODO: Make translation according to user settings
 		return map[book_id-1]["name"];
 	}
 
@@ -590,6 +753,10 @@ class BollsLifeBibleAPI extends BibleAPI {
 			return chapter_data;
 		} catch (e) {
 			if (e instanceof Error && e.message.startsWith("No book exists by name")) {
+				console.log(
+					"Failed to find chapter {0} in translation {1}, returning empty."
+						.format(book, translation)
+				)
 				return [];
 			}
 			throw e;
@@ -597,12 +764,10 @@ class BollsLifeBibleAPI extends BibleAPI {
 	}
 
 	async _get_translation_map(translation:string): Promise<Array<BollsLifeBookData>> {
-		if (this.translation_map.length == 0) {
-			this.translation_map = JSON.parse(await httpGet(
-				"https://bolls.life/get-books/{0}/".format(translation)
-			));
+		if (!(translation in this.translation_maps)) {
+			await this._generate_translation_map(translation);
 		}
-		return this.translation_map;
+		return this.translation_maps[translation];
 	}
 
 	async get_bible(translation:string): Promise<BollsLifeBibleData> {
@@ -646,10 +811,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 	}
 
 	async get_books(translation: string): Promise<BollsLifeBookData[]> {
-		if (this.translation_map.length == 0) {
-			await this._generate_translation_map(translation);
-		}
-		return this.translation_map;
+		return await this._get_translation_map(translation);
 	}
 
 	async get_default_translation(): Promise<string> {
@@ -689,7 +851,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 			chapter,
 		);
 		
-		return chapter_data[verse-1];
+		return chapter_data[verse-1] || "";
 	}
 }
 
@@ -849,12 +1011,12 @@ class DownloadBibleModal extends Modal {
 	onOpen() {
 		const {contentEl} = this;
 		
-		let tranlsation = this.plugin.settings.translation;
+		let translation = this.plugin.settings.translation;
 		
 		contentEl.createEl("h1", { text: "Download Bible?" });
 		contentEl.createEl("span", {
 			text: "You are about to download the entire {0} version of the Bible, according to your settings."
-				.format(tranlsation)
+				.format(translation)
 		});
 		contentEl.createEl("p", {
 			text: "Do you want to continue?"
@@ -875,7 +1037,7 @@ class DownloadBibleModal extends Modal {
 				.setCta()
 				.onClick(() => {
 					this.close();
-					this.downloadBible(tranlsation);
+					this.downloadBible(translation);
 				})
 			);
 	}
