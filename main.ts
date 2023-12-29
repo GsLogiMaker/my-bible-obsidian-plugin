@@ -84,7 +84,7 @@ const DEFAULT_SETTINGS: ProceduralNotesSettings = {
 }
 
 function httpGet(theUrl: string):Promise<string> {
-	console.log(theUrl);
+	console.log("MyBible : Fetching " + theUrl);
 	return new Promise(async (ok, err) => {
 		ok(await requestUrl(theUrl).text);
 	});
@@ -221,12 +221,10 @@ export default class ProceduralNotes extends Plugin {
 				i += 1;
 			}
 
-			console.log(ref[i]);
 			if (i != ref.length && is_numeric(ref[i])) {
 				// Compose range
 				verse_end = Number(ref[i]);
 				i += 1;
-				console.log(ref[i]);
 			}
 
 			if (i != ref.length && is_alphanumeric(ref[i])) {
@@ -273,7 +271,6 @@ export default class ProceduralNotes extends Plugin {
 					chapter,
 					verse,
 				);
-				console.log(text);
 				if (text.length === 0) {
 					text = "[Could not find text for the book '{1}', translation '{3}', chapter {0}, verse {2}]"
 						.format(String(chapter), book, String(verse), translation)
@@ -613,7 +610,7 @@ class BibleAPI {
 								await this.plugin.app.vault.adapter
 									.read(cached_file_path)
 							);
-							console.log("LOADED", cached_file_path);
+							console.log("MyBible : Loading ", cached_file_path);
 						}
 					}
 
