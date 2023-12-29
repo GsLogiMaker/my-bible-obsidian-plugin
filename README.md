@@ -23,8 +23,14 @@ My Bible sets up a folder structure and populates it with one note per chapter. 
 ### Getting started
 1. Download the plugin from the *Community Plugins* list in the Obsidian settings.
 2. Head to the settings for *My Bible* and change them how you like (you can do this later if you like.)
-3. Press `ctrl+p` then search for and select the command `Build My Bible`.
+3. Press `ctrl+p` then search for and select the command `Build Bible`.
 4. Start linking notes to your Bible!
+
+### Commands
+
+* `Build Bible` - Builds the file structure for the Bible within your vault.
+* `Download Translation` - Downloads the translation from your settings to be used offline.
+* `Clear Cache` - Removes all cached chapters from your file system, including translations you downloaded.
 
 ### Troubleshooting
 If you have issues with the plugin [please report them here](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new).
