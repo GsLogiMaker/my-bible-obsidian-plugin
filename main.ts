@@ -28,7 +28,7 @@ import {E_CANCELED, Mutex, MutexInterface, Semaphore, SemaphoreInterface, withTi
 
 // Remember to rename these classes and interfaces!
 
-interface ProceduralNotesSettings {
+class ProceduralNotesSettings {
 	translation: string;
 	bible_folder: string;
 	book_name_format: string;
@@ -38,10 +38,22 @@ interface ProceduralNotesSettings {
 	verse_body_format: string;
 	chapter_body_format: string;
 	store_locally: boolean;
+
+	async set_translation(val:string, plugin:ProceduralNotes) {
+		let has_translation = false;
+		let translations = (await plugin.bible_api.get_translations());
+		if (!(val in translations)) {
+			for (let translation in translations) {
+				this.translation = translation
+			}
+		} else {
+			this.translation = val;
+		}
+	}
 }
 
 const DEFAULT_SETTINGS: ProceduralNotesSettings = {
-	translation: "BBE",
+	translation: "",
 	bible_folder: "/Bible/",
 	book_name_format: "{order} {book}",
 	chapter_name_format: "{book} {chapter}",
@@ -59,7 +71,16 @@ const DEFAULT_SETTINGS: ProceduralNotesSettings = {
 		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]"
 		+ "\n",
 	store_locally: false,
-	
+
+	set_translation: async function (val: string, plugin: ProceduralNotes): Promise<void> {
+		let has_translation = false;
+		let translations = (await plugin.bible_api.get_translations());
+		if (!(val in translations)) {
+			this.translation = await plugin.bible_api.get_default_translation();
+		} else {
+			this.translation = val;
+		}
+	}
 }
 
 function httpGet(theUrl: string):Promise<string> {
@@ -81,9 +102,12 @@ export default class ProceduralNotes extends Plugin {
 
 		this.bible_api = new BollsLifeBibleAPI();
 		this.bible_api.plugin = this;
+
+		await this.settings.set_translation(this.settings.translation, this);
+
 		let translation_data = await this.bible_api
 			.get_books(this.settings.translation);
-		
+
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: 'create_bible_files',
@@ -452,10 +476,10 @@ class BibleAPI {
 		}
 
 		if (cached.chapter_data === null || cached.chapter_data.length == 0) {
-			throw new Error('Chapter data is null.');
+			return [];
 		}
 
-		this.cache_chapter(
+		await this.cache_chapter(
 			translation,
 			book,
 			chapter,
@@ -471,6 +495,10 @@ class BibleAPI {
 		book:string,
 		chapter:Number,
 	): Promise<BollsLifeChapterData> {
+		throw new Error("unimplemented")
+	}
+
+	async get_default_translation(): Promise<string> {
 		throw new Error("unimplemented")
 	}
 
@@ -537,7 +565,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 				return Number(i)+1;
 			}
 		}
-		throw new Error('No chapter exists by name {0}.'.format(book));
+		throw new Error('No book exists by name {0}.'.format(book));
 	}
 
 	async _id_to_book(translation:string, book_id: number): Promise<string> {
@@ -551,14 +579,21 @@ class BollsLifeBibleAPI extends BibleAPI {
 		chapter:Number,
 	): Promise<BollsLifeChapterData> {
 		// Fetch chapter from the web
-		let book_id = await this._book_to_id(translation, book);
+		try {
+			let book_id = await this._book_to_id(translation, book);
 
-		let chapter_data = JSON.parse(await httpGet(
-			"https://bolls.life/get-chapter/{0}/{1}/{2}/"
-				.format(translation, String(book_id), String(chapter))
-		)).map((x:BollsLifeVerseData) => x.text);
-
-		return chapter_data;
+			let chapter_data = JSON.parse(await httpGet(
+				"https://bolls.life/get-chapter/{0}/{1}/{2}/"
+					.format(translation, String(book_id), String(chapter))
+			)).map((x:BollsLifeVerseData) => x.text);
+	
+			return chapter_data;
+		} catch (e) {
+			if (e instanceof Error && e.message.startsWith("No book exists by name")) {
+				return [];
+			}
+			throw e;
+		}
 	}
 
 	async _get_translation_map(translation:string): Promise<Array<BollsLifeBookData>> {
@@ -615,6 +650,10 @@ class BollsLifeBibleAPI extends BibleAPI {
 			await this._generate_translation_map(translation);
 		}
 		return this.translation_map;
+	}
+
+	async get_default_translation(): Promise<string> {
+		return "YLT";
 	}
 
 	async get_translations(): Promise<Translations> {
