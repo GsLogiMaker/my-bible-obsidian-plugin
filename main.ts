@@ -25,6 +25,8 @@ import { wrap } from 'module';
 
 import {E_CANCELED, Mutex, MutexInterface, Semaphore, SemaphoreInterface, withTimeout} from 'async-mutex';
 
+const BUILD_START_TOAST = "Bible build started!";
+const BUILD_END_TOAST = "Bible build finished!";
 
 // Remember to rename these classes and interfaces!
 
@@ -157,8 +159,9 @@ export default class ProceduralNotes extends Plugin {
 				if (folders_and_files.files.length+folders_and_files.folders.length != 0) {
 					new ClearOldBibleFilesModal(this.app, this).open();
 				} else {
+					new Notice(BUILD_START_TOAST);
 					await this.build_bible(bible_path);
-					new Notice("Bible build completed!");
+					new Notice(BUILD_END_TOAST);
 				}
 			}
 		});
@@ -336,6 +339,7 @@ export default class ProceduralNotes extends Plugin {
 				if (next_chapter > book_meta.chapters) next_chapter -= book_meta.chapters;
 
 				// Assemble verses
+				let file_promises:Array<Promise<any>> = [];
 				let verses = "";
 				for (let verse_i of Array(VERSE_COUNTS[book_meta.name][chapter_i]).keys()) {
 					verses += this.format_verse_body(
@@ -372,13 +376,16 @@ export default class ProceduralNotes extends Plugin {
 				let file_path = normalizePath(book_path+"/"+chapter_note_name+".md");
 				let file = this.app.vault.getAbstractFileByPath(file_path);
 				if (file instanceof TFile) {
-					this.app.vault.modify(file, note_body);
+					file_promises.push(this.app.vault.modify(file, note_body));
 				} else if (file === null) {
-					this.app.vault.create(
-						file_path,
-						note_body,
+					file_promises.push(
+						this.app.vault.create(
+							file_path,
+							note_body,
+						)
 					);
 				}
+				await Promise.all(file_promises);
 			}
 		}
 	}
@@ -938,8 +945,9 @@ class ClearOldBibleFilesModal extends Modal {
 				.setCta()
 				.onClick(async () => {
 					this.close();
+					new Notice(BUILD_START_TOAST);
 					await this.plugin.build_bible(bible_path);
-					new Notice("Bible build completed!");
+					new Notice(BUILD_END_TOAST);
 				})
 			)
 			.addButton((btn) =>
@@ -948,6 +956,7 @@ class ClearOldBibleFilesModal extends Modal {
 				.setCta()
 				.onClick(async () => {
 					this.close();
+					new Notice(BUILD_START_TOAST);
 					let list = await this.app.vault.adapter.list(bible_path);
 					for (let path of list.files) {
 						let abstract = this.app.vault.getAbstractFileByPath(
@@ -966,7 +975,7 @@ class ClearOldBibleFilesModal extends Modal {
 						}
 					}
 					await this.plugin.build_bible(bible_path);
-					new Notice("Bible build completed!");
+					new Notice(BUILD_END_TOAST);
 				})
 			);
 	}
@@ -1012,7 +1021,7 @@ class DownloadBibleModal extends Modal {
 		
 		contentEl.createEl("h1", { text: "Download Bible?" });
 		contentEl.createEl("span", {
-			text: "You are about to download the entire {0} version of the Bible, according to your settings."
+			text: "You are about to download the entire {0} translation of the Bible, according to your settings."
 				.format(translation)
 		});
 		contentEl.createEl("p", {
@@ -1045,6 +1054,11 @@ class DownloadBibleModal extends Modal {
 	}
 
 	async downloadBible(translation:string) {
+		new Notice(
+			'Started download of the {0} translation!'
+				.format(translation)
+		);
+
 		let bible = await this.plugin.bible_api.get_bible(translation);
 		for (let book_name in bible.books) {
 			for (let chapter of Array(bible.books[book_name].length).keys()) {
@@ -1059,7 +1073,7 @@ class DownloadBibleModal extends Modal {
 		}
 
 		new Notice(
-			'Completed download of {0} bible!'
+			'Completed download of the {0} translation!'
 				.format(translation)
 		);
 	}
