@@ -186,8 +186,6 @@ export default class ProceduralNotes extends Plugin {
 		this.registerMarkdownCodeBlockProcessor("verse", async (source, element, context) => {
 			const ref = source.trim().replace(/[:-]/g, " ").split(" ");
 
-			console.log(ref);
-
 			let book = "";
 			let chapter = -1;
 			let verse = -1;
@@ -246,7 +244,6 @@ export default class ProceduralNotes extends Plugin {
 					text: "[Chapter must be provided]",
 				});
 			} else if (verse === -1) {
-				console.log(0);
 				let verses = await this.bible_api.get_chapter_cached(
 					translation,
 					book,
@@ -268,7 +265,6 @@ export default class ProceduralNotes extends Plugin {
 					text: text,
 				});
 			} else if (verse_end < verse) {
-				console.log(1);
 				let text = await this.bible_api.get_verse(
 					translation,
 					book,
@@ -283,7 +279,6 @@ export default class ProceduralNotes extends Plugin {
 					text: text,
 				});
 			} else {
-				console.log(2);
 				let verses = await this.bible_api.get_chapter_cached(
 					translation,
 					book,
