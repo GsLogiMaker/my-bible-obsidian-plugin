@@ -61,7 +61,7 @@ const DEFAULT_SETTINGS: ProceduralNotesSettings = {
 	padded_chapter: false,
 	verse_body_format: "###### {verse}\n"
 		+ "``` verse\n"
-		+ "{book} {chapter}:{verse}"
+		+ "{book} {chapter}:{verse}\n"
 		+ "```",
 	chapter_body_format: "\n"
 		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]\n"
@@ -950,7 +950,7 @@ class SettingsTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Save Bible Locally')
-			.setDesc('When *ON*, caches viewed chapters on the local file, so that they can be accessed without an internet connection.')
+			.setDesc('When ON, caches viewed chapters on the local file system, so that they can be accessed without an internet connection.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.store_locally)
 				.onChange(async (value) => {
@@ -987,7 +987,7 @@ class SettingsTab extends PluginSettingTab {
 		
 		new Setting(containerEl)
 			.setName('Chapter Name Format')
-			.setDesc('Formatting for the names of the notes of each chapter of a book. For example, "{book} {chapter}" would become "Psalms 23".')
+			.setDesc('Formatting for the names of the notes of each chapter of a book. For example, "{book} {chapter}" would become "Psalms 23.md".')
 			.addText(text => text
 				.setPlaceholder(this.plugin.settings.chapter_name_format)
 				.setValue(this.plugin.settings.chapter_name_format)
@@ -998,7 +998,7 @@ class SettingsTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Padded Bible Order Numbers')
-			.setDesc('When *ON*, changes "{order}" in the names of book folders to be padded with extra zeros. For example, "1 Genesis" would become "01 Gensis" when turned *ON*.')
+			.setDesc('When ON, changes "{order}" in the names of book folders to be padded with extra zeros. For example, "1 Genesis" would become "01 Gensis" when turned ON.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.padded_order)
 				.onChange(async (value) => {
@@ -1008,7 +1008,7 @@ class SettingsTab extends PluginSettingTab {
 		
 		new Setting(containerEl)
 			.setName('Padded Chapter Numbers')
-			.setDesc('When *ON*, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned *ON*.')
+			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.padded_chapter)
 				.onChange(async (value) => {
