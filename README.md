@@ -21,8 +21,8 @@ My Bible sets up a folder structure and populates it with one note per chapter. 
 1. Download the plugin from the *Community Plugins* list in the Obsidian settings.
 2. Activate *My Bible* in the *Community Plugins* tab in *Settings*.
 3. Head to the settings for *My Bible* and change them how you like (you can do this later if you like.)
-4. Press `ctrl+p` to open the command list, then search for and select the command `Build Bible`.
-5. Start linking notes to the Bible!
+4. Close the settings menu, then press `ctrl+p` to open the command list, then search for and select the command `Build Bible`.
+5. You now have the Bible in your vault and are ready to start linking notes to it!
 
 ### Commands
 * `Build Bible` - Builds the file structure for the Bible within your vault.
