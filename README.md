@@ -11,11 +11,8 @@ Your own customizable bible for your personal vault!
 
 Are these features not enough? [Submit your own ideas here!](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new)
 
-### Purpose
-My Bible is designed to make it easy for you to have the Bible in your vault. Whether you're new to Obsidian or an experienced user, My Bible can help you quickly set up a Bible that you can use for study and reference.
-
-### Who is it for?
-My Bible is designed for any and all Christians who want to study the bible, and reference it in their notes. I believe everyone should have access to good notes for their studies, so My Bible is made to be quick and easy to set up in, even if you are not tech-savvy or an Obsidian super-user.
+### Inspiration
+I was inspired by Obsidian user [Joschua's](https://joschua.io/) idea of [linking all our notes with scripture](https://notes.joschua.io/60+Outputs/62+Projects/Bible+Study+Kit/Connecting+makes+you+engage+Scripture). He did this by including a copy of the Bible in his vault, with every chapter as one note and each verse as a header within it. I followed his instructions for doing this, and got the Bible in my own vault too, and it's great having the Bible to link to in my vault. I get to see visually how the Bible connects to my studies, my dreams, and more! However, the process was technical, and I don't think I could convince any non-programmer to do this for their own vault. I wanted to change that, so I made My Bible to streamline the process to just a few simple steps, without ever leaving Obsidian.
 
 ### How it works
 My Bible sets up a folder structure and populates it with one note per chapter. The chapters don't contain the text of the Bible; the text is inserted as you read it, allowing you to have any translation you want, represented by the same file/chapter/note. Because of this, you don't even need to download the entire Bible (unless you want to.)
@@ -35,8 +32,8 @@ My Bible sets up a folder structure and populates it with one note per chapter. 
 ### Troubleshooting
 If you have issues with the plugin [please report them here](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new).
 
-### Donations
-If you'd like to support my work, you can do so here!
+### Support
+If you want to support my work, buy me a coffee! If you want to follow development of My Bible, follow me on [X/Twitter](https://twitter.com/GsLogiMaker).
 
 <a href="https://www.buymeacoffee.com/gslogimake0" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
