@@ -30,7 +30,7 @@ const BUILD_END_TOAST = "Bible build finished!";
 
 // Remember to rename these classes and interfaces!
 
-class ProceduralNotesSettings {
+class MyBibleSettings {
 	translation: string;
 	bible_folder: string;
 	book_name_format: string;
@@ -41,7 +41,7 @@ class ProceduralNotesSettings {
 	chapter_body_format: string;
 	store_locally: boolean;
 
-	async set_translation(val:string, plugin:ProceduralNotes) {
+	async set_translation(val:string, plugin:MyBible) {
 		let has_translation = false;
 		let translations = (await plugin.bible_api.get_translations());
 		if (!(val in translations)) {
@@ -54,7 +54,7 @@ class ProceduralNotesSettings {
 	}
 }
 
-const DEFAULT_SETTINGS: ProceduralNotesSettings = {
+const DEFAULT_SETTINGS: MyBibleSettings = {
 	translation: "",
 	bible_folder: "/Bible/",
 	book_name_format: "{order} {book}",
@@ -74,7 +74,7 @@ const DEFAULT_SETTINGS: ProceduralNotesSettings = {
 		+ "\n",
 	store_locally: false,
 
-	set_translation: async function (val: string, plugin: ProceduralNotes): Promise<void> {
+	set_translation: async function (val: string, plugin: MyBible): Promise<void> {
 		let has_translation = false;
 		let translations = (await plugin.bible_api.get_translations());
 		if (!(val in translations)) {
@@ -136,9 +136,9 @@ function is_numeric(string:string): boolean {
 
 
 
-export default class ProceduralNotes extends Plugin {
+export default class MyBible extends Plugin {
 	bible_api: BibleAPI;
-	settings: ProceduralNotesSettings;
+	settings: MyBibleSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -151,7 +151,7 @@ export default class ProceduralNotes extends Plugin {
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: 'create_bible_files',
-			name: 'Build Bible',
+			name: 'Build bible',
 			callback: async () => {
 				let bible_path = normalizePath(this.settings.bible_folder);
 				this.app.vault.adapter.mkdir(bible_path);
@@ -168,7 +168,7 @@ export default class ProceduralNotes extends Plugin {
 
 		this.addCommand({
 			id: 'clear_cache',
-			name: 'Clear Cache',
+			name: 'Clear cache',
 			callback: async () => {
 				new ClearCacheFilesModal(this.app, this).open();
 			}
@@ -176,7 +176,7 @@ export default class ProceduralNotes extends Plugin {
 
 		this.addCommand({
 			id: 'download_bible',
-			name: 'Download Translation',
+			name: 'Download translation',
 			callback: async () => {
 				// TODO: Open a dialogue to confirm downloading an entire bible
 				new DownloadBibleModal(
@@ -500,7 +500,7 @@ class BibleAPI {
 	cache_clear_timer:Promise<null>|null = null;
 	cache_clear_timer_promise_err:(reason?:any) => void;
 	chapter_cache: Record<ChapterKey, BollsLifeChapterCache> = {};
-	plugin: ProceduralNotes;
+	plugin: MyBible;
 	
 	async cache_chapter(
 		translation:string,
@@ -698,7 +698,7 @@ interface Translation {
 
 
 class BollsLifeBibleAPI extends BibleAPI {
-	plugin: ProceduralNotes;
+	plugin: MyBible;
 	chapter_cache: Record<ChapterKey, BollsLifeChapterCache> = {};
 	translations: Translations = {};
 	translation_maps: Record<string, Array<BollsLifeBookData>> = {};
@@ -860,9 +860,9 @@ class BollsLifeBibleAPI extends BibleAPI {
 }
 
 class ClearCacheFilesModal extends Modal {
-	plugin: ProceduralNotes;
+	plugin: MyBible;
 
-	constructor(app: App, plugin:ProceduralNotes) {
+	constructor(app: App, plugin:MyBible) {
 		super(app);
 		this.plugin = plugin;
 	}
@@ -872,7 +872,7 @@ class ClearCacheFilesModal extends Modal {
 		
 		let bible_path = this.plugin.settings.bible_folder;
 		
-		contentEl.createEl("h1", { text: "Clear Cache?" });
+		contentEl.createEl("h1", { text: "Clear cache?" });
 		contentEl.createEl("span", {
 			text: "You are about to clear out all cached chapters from your file system. This includes translations you manually downloaded."
 				.format(bible_path)
@@ -892,7 +892,7 @@ class ClearCacheFilesModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-				.setButtonText("Clear Cache")
+				.setButtonText("Clear cache")
 				.setCta()
 				.onClick(async () => {
 					this.close();
@@ -909,9 +909,9 @@ class ClearCacheFilesModal extends Modal {
 }
 
 class ClearOldBibleFilesModal extends Modal {
-	plugin: ProceduralNotes;
+	plugin: MyBible;
 
-	constructor(app: App, plugin:ProceduralNotes) {
+	constructor(app: App, plugin:MyBible) {
 		super(app);
 		this.plugin = plugin;
 	}
@@ -921,7 +921,7 @@ class ClearOldBibleFilesModal extends Modal {
 		
 		let bible_path = this.plugin.settings.bible_folder;
 		
-		contentEl.createEl("h1", { text: "Bible Folder is Not Empty" });
+		contentEl.createEl("h1", { text: "Bible folder is not empty" });
 		contentEl.createEl("span", {
 			text: "The Bible folder in your settings is not empty. If you built a Bible in this folder before the new bible may be interlaced with the old one."
 				.format(bible_path)
@@ -941,7 +941,7 @@ class ClearOldBibleFilesModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-				.setButtonText("Build Without Clearing")
+				.setButtonText("Build without clearing")
 				.setCta()
 				.onClick(async () => {
 					this.close();
@@ -952,7 +952,7 @@ class ClearOldBibleFilesModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-				.setButtonText("Clear and Build")
+				.setButtonText("Clear and build")
 				.setCta()
 				.onClick(async () => {
 					this.close();
@@ -984,32 +984,12 @@ class ClearOldBibleFilesModal extends Modal {
 		const {contentEl} = this;
 		contentEl.empty();
 	}
-
-	async downloadBible(translation:string) {
-		let bible = await this.plugin.bible_api.get_bible(translation);
-		for (let book_name in bible.books) {
-			for (let chapter of Array(bible.books[book_name].length).keys()) {
-				await this.plugin.bible_api.cache_chapter(
-					translation,
-					book_name,
-					chapter+1,
-					bible.books[book_name][chapter],
-					true,
-				);
-			}
-		}
-
-		new Notice(
-			'Completed download of {0} bible!'
-				.format(translation)
-		);
-	}
 }
 
 class DownloadBibleModal extends Modal {
-	plugin: ProceduralNotes;
+	plugin: MyBible;
 
-	constructor(app: App, plugin:ProceduralNotes) {
+	constructor(app: App, plugin:MyBible) {
 		super(app);
 		this.plugin = plugin;
 	}
@@ -1019,7 +999,7 @@ class DownloadBibleModal extends Modal {
 		
 		let translation = this.plugin.settings.translation;
 		
-		contentEl.createEl("h1", { text: "Download Bible?" });
+		contentEl.createEl("h1", { text: "Download bible?" });
 		contentEl.createEl("span", {
 			text: "You are about to download the entire {0} translation of the Bible, according to your settings."
 				.format(translation)
@@ -1080,9 +1060,9 @@ class DownloadBibleModal extends Modal {
 }
 
 class SettingsTab extends PluginSettingTab {
-	plugin: ProceduralNotes;
+	plugin: MyBible;
 
-	constructor(app: App, plugin: ProceduralNotes) {
+	constructor(app: App, plugin: MyBible) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -1122,7 +1102,7 @@ class SettingsTab extends PluginSettingTab {
 			.setName("Data")
 
 		new Setting(containerEl)
-			.setName('Save Bible Locally')
+			.setName('Save bible locally')
 			.setDesc('When ON, caches viewed chapters on the local file system, so that they can be accessed without an internet connection.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.store_locally)
@@ -1136,7 +1116,7 @@ class SettingsTab extends PluginSettingTab {
 			.setName("Formatting")
 
 		new Setting(containerEl)
-			.setName('Bible Folder')
+			.setName('Bible folder')
 			.setDesc('A path to the folder where all the files for the bible will be placed. If the path does not exist it will be created.')
 			.addText(text => text
 				.setPlaceholder("Example: " + DEFAULT_SETTINGS.bible_folder)
@@ -1148,7 +1128,7 @@ class SettingsTab extends PluginSettingTab {
 			);
 		
 		new Setting(containerEl)
-			.setName('Book Name Format')
+			.setName('Book name format')
 			.setDesc('Formatting for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
 			.addText(text => text
 				.setPlaceholder("Example: " + DEFAULT_SETTINGS.book_name_format)
@@ -1159,7 +1139,7 @@ class SettingsTab extends PluginSettingTab {
 				}))
 		
 		new Setting(containerEl)
-			.setName('Chapter Name Format')
+			.setName('Chapter name format')
 			.setDesc('Formatting for the names of the notes of each chapter of a book. For example, "{book} {chapter}" would become "Psalms 23.md".')
 			.addText(text => text
 				.setPlaceholder(this.plugin.settings.chapter_name_format)
@@ -1170,7 +1150,7 @@ class SettingsTab extends PluginSettingTab {
 				}))
 
 		new Setting(containerEl)
-			.setName('Padded Bible Order Numbers')
+			.setName('Padded nible order numbers')
 			.setDesc('When ON, changes "{order}" in the names of book folders to be padded with extra zeros. For example, "1 Genesis" would become "01 Gensis" when turned ON.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.padded_order)
@@ -1180,7 +1160,7 @@ class SettingsTab extends PluginSettingTab {
 				}))
 		
 		new Setting(containerEl)
-			.setName('Padded Chapter Numbers')
+			.setName('Padded chapter numbers')
 			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.padded_chapter)
@@ -1190,7 +1170,7 @@ class SettingsTab extends PluginSettingTab {
 				}))
 
 		new Setting(containerEl)
-			.setName('Verse Body Format')
+			.setName('Verse body format')
 			.setDesc('Formatting for the body of verses in chapters.')
 			.addTextArea(text => text
 				.setPlaceholder("Example: " + DEFAULT_SETTINGS.verse_body_format)
@@ -1201,7 +1181,7 @@ class SettingsTab extends PluginSettingTab {
 				}))
 		
 		new Setting(containerEl)
-			.setName('Chapter Body Format')
+			.setName('Chapter body format')
 			.setDesc('Formatting for the body of chapter notes.')
 			.addTextArea(text => text
 				.setPlaceholder("Example: " + DEFAULT_SETTINGS.chapter_body_format)
