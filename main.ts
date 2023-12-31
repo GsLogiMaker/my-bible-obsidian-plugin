@@ -1,29 +1,16 @@
 import {
 	App,
-	Editor,
-	MarkdownView,
 	Modal,
 	Notice,
 	Plugin,
 	PluginSettingTab,
-	RequestUrlResponsePromise,
 	Setting,
 	TFile,
-	TextAreaComponent,
 	normalizePath,
 	requestUrl,
 } from 'obsidian';
 
-import {
-	ViewUpdate,
-	PluginValue,
-	EditorView,
-	ViewPlugin,
-  } from "@codemirror/view";
-import { assert } from 'console';
-import { wrap } from 'module';
-
-import {E_CANCELED, Mutex, MutexInterface, Semaphore, SemaphoreInterface, withTimeout} from 'async-mutex';
+import {E_CANCELED, Mutex} from 'async-mutex';
 
 const BUILD_START_TOAST = "Bible build started!";
 const BUILD_END_TOAST = "Bible build finished!";
