@@ -225,37 +225,30 @@ export default class MyBible extends Plugin {
 
 			let translation = maybe_translation || this.settings.translation;
 
+			let text = "";
 			if (book.length === 0) {
-				element.createSpan({
-					text: "[Book and chapter must be provided]",
-				});
+				text = "[Book and chapter must be provided]";
 			} else if (chapter === -1) {
-				element.createSpan({
-					text: "[Chapter must be provided]",
-				});
+				text = "[Chapter must be provided]";
 			} else if (verse === -1) {
 				let verses = await this.bible_api.get_chapter_cached(
 					translation,
 					book,
 					chapter,
 				);
-				let text = "";
 				for (let verse_i of verses.keys()) {
 					let verse = verses[verse_i];
-					text += ""+(verse_i+1)+" "+verse;
+					text += "<sup>"+(verse_i+1)+"</sup> "+verse;
 					if (verse_i != verses.length-1) {
-						text += "\n";
+						text += "<br>";
 					}
 				}
 				if (text.length === 0) {
 					text = "[Could not find text for the book '{1}', translation '{2}', chapter {0}]"
 						.format(String(chapter), book, translation)
 				}
-				element.createSpan({
-					text: text,
-				});
 			} else if (verse_end < verse) {
-				let text = await this.bible_api.get_verse(
+				text = await this.bible_api.get_verse(
 					translation,
 					book,
 					chapter,
@@ -265,21 +258,17 @@ export default class MyBible extends Plugin {
 					text = "[Could not find text for the book '{1}', translation '{3}', chapter {0}, verse {2}]"
 						.format(String(chapter), book, String(verse), translation)
 				}
-				element.createSpan({
-					text: text,
-				});
 			} else {
 				let verses = await this.bible_api.get_chapter_cached(
 					translation,
 					book,
 					chapter,
 				);
-				let text = "";
 				let j = verse;
 				while (j < verse_end+1 && j < verses.length) {
-					text += "" + j + " " + verses[j-1];
+					text += "<sup>" + j + "</sup> " + verses[j-1];
 					if (j != verse_end) {
-						text += "\n";
+						text += "<br>";
 					}
 					j += 1;
 				}
@@ -287,11 +276,52 @@ export default class MyBible extends Plugin {
 					text = "[Could not find text for the book '{1}', translation '{4}', chapter {0}, verses {2}-{3}]"
 						.format(String(chapter), book, String(verse), String(verse_end), translation)
 				}
-				element.createSpan({
-					text: text,
-				});
 			}
-			
+
+			let span = element.createSpan({
+				text: "",
+			});
+
+			let tags = text.matchAll(
+				/(?:<\s*([\w]*)\s*>(.*?)<\s*\/\1\s*>)|<\s*(br|\/br)\s*>|(.+?(?:(?=<\s*[/\\\w]*\s*>)|$))/gs
+			);
+			for (let match of tags) {
+				console.log(match);
+				let tag_type = match[1];
+				let tag_text = match[2];
+				let lone_tag_type = match[3];
+				let normal_text = match[4];
+				if (normal_text !== undefined) {
+					span.createSpan({
+						text: normal_text,
+					});
+				} else if (lone_tag_type === "br") {
+					span.createEl(lone_tag_type);
+				} else if (lone_tag_type === "br/") {
+					/* Do nothing */
+				} else if (tag_type === "sup") {
+					span.createEl(tag_type, {text: tag_text});
+				} else if (tag_type === "sub") {
+					span.createEl(tag_type, {text: tag_text});
+				} else if (tag_type === "S") {
+					span.createEl(
+						"sub",
+						{text: tag_text, attr:{style: "opacity: 0.5"}},
+					);
+				} else if (tag_type === "i") {
+					span.createEl(tag_type, {text: tag_text});
+				} else if (tag_type === "b") {
+					span.createEl(tag_type, {text: tag_text});
+				} else if (tag_type === "e") {
+					/// A quote from from elsewhere in the bible.
+					span.createEl("i").createEl("q", {text: tag_text});
+				} else {
+					span.createSpan(
+						{text: "<{0}>{1}</{0}>".format(tag_type, tag_text)},
+					);
+				}
+			}
+
 		  });
 
 
