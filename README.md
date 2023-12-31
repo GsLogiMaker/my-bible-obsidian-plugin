@@ -17,6 +17,9 @@ I was inspired by Obsidian user [Joschua's](https://joschua.io/) idea of [linkin
 ### How it works
 My Bible sets up a folder structure and populates it with one note per chapter. The chapters don't contain the text of the Bible; the text is inserted as you read it, allowing you to have any translation you want, represented by the same file/chapter/note. Because of this, you don't even need to download the entire Bible (unless you want to.)
 
+### Notice
+This plugin makes requests to [https://bolls.life/api/](https://bolls.life/api/) to download text and meta-data regarding translations, books, and chapters of the Bible. The plugin does not, itself, contain translations.
+
 ### Getting started
 1. Download the plugin from the *Community Plugins* list in the Obsidian settings.
 2. Activate *My Bible* in the *Community Plugins* tab in *Settings*.
