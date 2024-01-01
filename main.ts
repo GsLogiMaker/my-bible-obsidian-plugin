@@ -172,7 +172,7 @@ export default class MyBible extends Plugin {
 				).open();
 			}
 		});
-		
+
 		this.registerMarkdownCodeBlockProcessor("verse", async (source, element, context) => {
 			const ref = source.trim().replace(/[:-]/g, " ").split(" ");
 
@@ -336,7 +336,18 @@ export default class MyBible extends Plugin {
 		// TODO: Build bibles according to translation in settings
 		let books = await this.bible_api.get_books("YLT");
 
-		for (let book_meta of books) {
+		for (let book_i of books.keys()) {
+			let book_meta = books[book_i];
+			
+			let last_book_meta = books[book_i-1];
+			let next_book_meta = books[book_i+1];
+			if (book_i-1 < 0) {
+				last_book_meta = books[books.length-1];
+			}
+			if (book_i > books.length-0) {
+				last_book_meta = books[0];
+			}
+
 			// Loop over books
 			let book_id = book_meta.order;
 
@@ -351,9 +362,17 @@ export default class MyBible extends Plugin {
 				
 				// Wrap last and next chapter indecies
 				var last_chapter = chapter_i; // Don't need to subtract, because chapter index is already -1 the current chapter
-				if (last_chapter < 1) last_chapter += book_meta.chapters;
+				let last_chapter_book = book_meta;
+				if (last_chapter < 1) {
+					last_chapter_book = last_book_meta;
+					last_chapter = last_chapter_book.chapters;
+				};
 				var next_chapter = chapter_i+2;
-				if (next_chapter > book_meta.chapters) next_chapter -= book_meta.chapters;
+				let next_chapter_book = book_meta;
+				if (next_chapter > book_meta.chapters) {
+					next_chapter_book = next_book_meta;
+					next_chapter = 1;
+				};
 
 				// Assemble verses
 				let file_promises:Array<Promise<any>> = [];
@@ -381,8 +400,9 @@ export default class MyBible extends Plugin {
 
 				// Chapter body
 				let note_body = this.format_chapter_body(
-					book_meta.name,
-					book_meta.order,
+					book_meta,
+					last_chapter_book,
+					next_chapter_book,
 					chapter_i+1,
 					last_chapter,
 					next_chapter,
@@ -425,21 +445,41 @@ export default class MyBible extends Plugin {
 			.replace(/{book}/g, book)
 	}
 
-	format_chapter_body(book:string, order:Number, chapter:number, last_chapter:number, next_chapter:number, verses:string):string {
+	format_chapter_body(
+		book:BollsLifeBookData,
+		last_book:BollsLifeBookData,
+		next_book:BollsLifeBookData,
+		chapter:number,
+		last_chapter:number,
+		next_chapter:number,
+		verses:string,
+	):string {
 		return this.settings.chapter_body_format
 			.replace(/{verses}/g, verses)
-			.replace(/{book}/g, book)
+			.replace(/{book}/g, book.name)
 			.replace(
 				/{order}/g,
-				String(order)
+				String(book.order)
 					.padStart(2*Number(this.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(chapter))
-			.replace(/{chapter_name}/g, this.format_chapter_name(book, order, chapter))
+			.replace(/{chapter_name}/g, this.format_chapter_name(
+				book.name,
+				book.order,
+				chapter,
+			))
 			.replace(/{last_chapter}/g, String(last_chapter))
-			.replace(/{last_chapter_name}/g, this.format_chapter_name(book, order, last_chapter))
+			.replace(/{last_chapter_name}/g, this.format_chapter_name(
+				last_book.name,
+				last_book.order,
+				last_chapter,
+			))
 			.replace(/{next_chapter}/g, String(next_chapter))
-			.replace(/{next_chapter_name}/g, this.format_chapter_name(book, order, next_chapter));
+			.replace(/{next_chapter_name}/g, this.format_chapter_name(
+				next_book.name,
+				next_book.order,
+				next_chapter,
+			));
 	}
 
 	format_chapter_name(book_name:string, order:Number, chapter:number):string {
