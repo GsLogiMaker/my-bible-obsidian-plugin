@@ -320,9 +320,9 @@ export default class MyBible extends Plugin {
 			for (const chapter_i of Array(book_meta.chapters).keys()) {
 				
 				// Wrap last and next chapter indecies
-				var last_chapter = chapter_i; // Don't need to subtract, because chapter index is already -1 the current chapter
+				let last_chapter = chapter_i; // Don't need to subtract, because chapter index is already -1 the current chapter
 				if (last_chapter < 1) last_chapter += book_meta.chapters;
-				var next_chapter = chapter_i+2;
+				let next_chapter = chapter_i+2;
 				if (next_chapter > book_meta.chapters) next_chapter -= book_meta.chapters;
 
 				// Assemble verses
@@ -581,7 +581,7 @@ class BibleAPI {
 			);
 		}
 
-		var cached = this.chapter_cache[chapter_key];
+		let cached = this.chapter_cache[chapter_key];
 
 		if (cached.chapter_data === null) {
 			await cached.mutex
