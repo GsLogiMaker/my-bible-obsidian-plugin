@@ -244,7 +244,7 @@ export default class MyBible extends Plugin {
 			let translation = maybe_translation || this.settings.translation;
 			if (book !== null) {
 				book_id = await this.bible_api
-					.book_id(this.settings._built_translation, book);
+					.book_id(this.settings._built_translation||translation, book);
 			}
 			book = (await this.bible_api.get_book(translation, book_id)).name;
 			
@@ -1269,17 +1269,13 @@ class DownloadBibleModal extends Modal {
 		);
 
 		let bible = await this.plugin.bible_api.get_translation(translation);
-		for (let book_name in bible.books) {
-			for (let chapter of Array(bible.books[book_name].length).keys()) {
-				let book_id = await this.plugin.bible_api.book_id(
-					translation,
-					book_name,
-				);
+		for (const book_id in bible.books) {
+			for (let chapter of Array(bible.books[book_id].length).keys()) {
 				await this.plugin.bible_api.cache_chapter(
 					translation,
-					book_id,
+					Number(book_id),
 					chapter + 1,
-					bible.books[book_name][chapter],
+					bible.books[book_id][chapter],
 					true,
 				);
 			}
