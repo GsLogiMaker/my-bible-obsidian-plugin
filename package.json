@@ -1,6 +1,6 @@
 {
 	"name": "gslogimaker-my-bible",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Your own customizable bible for your personal vault!",
 	"main": "main.js",
 	"scripts": {
@@ -8,7 +8,13 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
-	"keywords": ["Bible", "Christian", "Scripture", "God", "Jesus"],
+	"keywords": [
+		"Bible",
+		"Christian",
+		"Scripture",
+		"God",
+		"Jesus"
+	],
 	"author": "GsLogimaker",
 	"license": "MIT",
 	"devDependencies": {
