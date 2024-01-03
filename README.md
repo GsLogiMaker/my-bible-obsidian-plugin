@@ -1,7 +1,7 @@
 # My Bible
 Your own customizable bible for your personal vault!
 
-![](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/blob/444be699b5a81baddc5453856fc5da9fdadfce02/example.gif?raw=true)
+![](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/blob/444be699b5a81baddc5453856fc5da9fdadfce02/example.gif)
 
 - Read the Bible from within your Obsidian vault!
 - Automatically setup a folder structure for your Bible, which populates with verses as you read it!
