@@ -670,9 +670,16 @@ class BibleAPI {
 				chapter_data != null
 				&& !await this.plugin.app.vault.adapter.exists(cached_file_path)
 			) {
+				let body = "";
+				for (let i of chapter_data.keys()) {
+					body += chapter_data[i];
+					if (i !== chapter_data.length-1) {
+						body += "\n"
+					}
+				}
 				await this.plugin.app.vault.adapter.write(
 					cached_file_path,
-					JSON.stringify(chapter_data),
+					body,
 				);
 			}
 		}
@@ -813,10 +820,13 @@ class BibleAPI {
 							await this.plugin.app.vault.adapter
 								.exists(cached_file_path)
 						) {
-							cached.chapter_data = JSON.parse(
-								await this.plugin.app.vault.adapter
-									.read(cached_file_path)
-							);
+							let raw = await this.plugin.app.vault.adapter
+								.read(cached_file_path);
+							if (raw.startsWith("[")) {
+								cached.chapter_data = JSON.parse(raw);
+							} else {
+								cached.chapter_data = raw.split("\n");
+							}
 							console.log("MyBible : Loading ", cached_file_path);
 						}
 					}
