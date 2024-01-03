@@ -21,17 +21,18 @@ class MyBibleSettings {
 	translation: string;
 	bible_folder: string;
 
-	book_name_format: string;
-	book_name_capitalization: string;
-
-	chapter_name_format: string;
-	chapter_name_capitalization: string;
+	store_locally: boolean;
 
 	padded_order: boolean;
+	book_name_format: string;
+	book_name_delimiter: string;
+	book_name_capitalization: string;
+
 	padded_chapter: boolean;
-	verse_body_format: string;
+	chapter_name_format: string;
 	chapter_body_format: string;
-	store_locally: boolean;
+
+	verse_body_format: string;
 
 	_built_translation: string;
 
@@ -52,14 +53,14 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	translation: "",
 	bible_folder: "/Bible/",
 	book_name_format: "{order} {book}",
-	book_name_capitalization: "name_case",
+	book_name_delimiter: " ",
 	chapter_name_format: "{book} {chapter}",
-	chapter_name_capitalization: "name_case",
+	book_name_capitalization: "name_case",
 	padded_order: true,
 	padded_chapter: false,
 	verse_body_format: "###### {verse}\n"
 		+ "``` verse\n"
-		+ "{book} {chapter}:{verse}\n"
+		+ "{book_id} {chapter}:{verse}\n"
 		+ "```",
 	chapter_body_format: "\n"
 		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]\n"
@@ -187,7 +188,8 @@ export default class MyBible extends Plugin {
 		this.registerMarkdownCodeBlockProcessor("verse", async (source, element, context) => {
 			const ref = source.trim().replace(/[:-]/g, " ").split(" ");
 
-			let book = "";
+			let book:string|null = null;
+			let book_id = -1;
 			let chapter = -1;
 			let verse = -1;
 			let verse_end = -1;
@@ -198,7 +200,7 @@ export default class MyBible extends Plugin {
 				// Compose book name
 				if (i == 0) {
 					// Always add first item, no matter what it is
-					book += ref[i];
+					book = (book || "") + ref[i];
 				} else {
 					// Only add items that are words, and not numbers
 					if (!is_alpha(ref[i])) {
@@ -208,6 +210,11 @@ export default class MyBible extends Plugin {
 				}
 
 				i += 1;
+			}
+			if (is_numeric(book || "")) {
+				// Compose book_id
+				book_id = Number(book);
+				book = null;
 			}
 
 			if (i != ref.length && is_numeric(ref[i])) {
@@ -235,9 +242,12 @@ export default class MyBible extends Plugin {
 			}
 
 			let translation = maybe_translation || this.settings.translation;
-			let book_id = await this.bible_api
-				.book_id(this.settings._built_translation, book);
-
+			if (book !== null) {
+				book_id = await this.bible_api
+					.book_id(this.settings._built_translation, book);
+			}
+			book = (await this.bible_api.get_book(translation, book_id)).name;
+			
 			let text = "";
 			if (book.length === 0) {
 				text = "[Book and chapter must be provided]";
@@ -312,6 +322,8 @@ export default class MyBible extends Plugin {
 					});
 				} else if (lone_tag_type === "br") {
 					span.createEl(lone_tag_type);
+				} else if (lone_tag_type === "/J") {
+					/* Do nothing */
 				} else if (lone_tag_type === "br/") {
 					/* Do nothing */
 				} else if (tag_type === "sup") {
@@ -350,87 +362,47 @@ export default class MyBible extends Plugin {
 	async build_bible(bible_path: string) {
 		// TODO: Build bibles according to translation in settings
 		this.settings._built_translation = this.settings.translation;
-		let books = await this.bible_api.get_books(this.settings._built_translation);
-		console.log(this.settings._built_translation, books)
+		await this.saveSettings();
+		
+		let ctx = new BuildContext;
+		ctx.translation = this.settings._built_translation;
+		ctx.books = await this.bible_api.get_books(
+			this.settings._built_translation
+		);
+		ctx.translation_texts = await this.bible_api
+			.get_translation(ctx.translation);
 
-		for (let book_i of books.keys()) {
-			let book_meta = books[book_i];
-			let translation_data = await this.bible_api
-				.get_bible(this.settings._built_translation);
-
-			let last_book_meta = books[book_i - 1];
-			let next_book_meta = books[book_i + 1];
-			if (book_i - 1 < 0) {
-				last_book_meta = books[books.length - 1];
-			}
-			if (book_i > books.length - 0) {
-				last_book_meta = books[0];
-			}
-
-			// Loop over books
-			let book_id = book_meta.order;
+		for (let book of ctx.books) {
+			ctx.set_book(book.id);
 
 			// Book path
 			let book_path = bible_path;
 			if (this.settings.book_name_format.length != 0) {
-				book_path += "/" + this.format_book_name(
-					book_meta.name,
-					book_meta.order,
-				);
+				book_path += "/" + ctx.format_book_name(this);
 				this.app.vault.adapter.mkdir(normalizePath(book_path));
 			}
 
 			let file_promises: Array<Promise<any>> = [];
-			for (const chapter_i of Array(book_meta.chapters).keys()) {
-				console.log("CH", chapter_i);
-
-				// Wrap last and next chapter indecies
-				var last_chapter = chapter_i; // Don't need to subtract, because chapter index is already -1 the current chapter
-				let last_chapter_book = book_meta;
-				if (last_chapter < 1) {
-					last_chapter_book = last_book_meta;
-					last_chapter = last_chapter_book.chapters;
-				};
-				var next_chapter = chapter_i + 2;
-				let next_chapter_book = book_meta;
-				if (next_chapter > book_meta.chapters) {
-					next_chapter_book = next_book_meta;
-					next_chapter = 1;
-				};
+			for (const chapter_i of Array(ctx.book.chapters).keys()) {
+				ctx.set_chapter(chapter_i+1);
 
 				// Assemble verses
-				let verses = "";
-				console.log(translation_data);
-				for (let verse_i of Array(translation_data.books[book_id][chapter_i].length-1).keys()) {
-					verses += this.format_verse_body(
-						book_meta.name,
-						book_meta.order,
-						chapter_i + 1,
-						verse_i+1,
-					);
-					// TODO: Readd verse count check
-					// if (verse_i + 1 != VERSE_COUNTS[book_meta.name][chapter_i]) {
-						verses += "\n";
-					// }
+				ctx.verses_text = "";
+				let verse = 1;
+				while (verse != ctx.get_verse_count()+1) {
+					ctx.verse = verse;
+					ctx.verses_text += ctx.format_verse_body(this);
+					if (verse != ctx.get_verse_count()) {
+						ctx.verses_text += "\n";
+					}
+					verse += 1;
 				}
 
 				// Chapter name
-				let chapter_note_name = this.format_chapter_name(
-					book_meta.name,
-					book_meta.order,
-					chapter_i + 1,
-				);
+				let chapter_note_name = ctx.format_chapter_name(this);
 
 				// Chapter body
-				let note_body = this.format_chapter_body(
-					book_meta,
-					last_chapter_book,
-					next_chapter_book,
-					chapter_i + 1,
-					last_chapter,
-					next_chapter,
-					verses,
-				);
+				let note_body = ctx.format_chapter_body(this);
 
 				// Save file
 				let file_path = normalizePath(book_path + "/" + chapter_note_name + ".md");
@@ -445,9 +417,7 @@ export default class MyBible extends Plugin {
 						)
 					);
 				}
-				break;
 			}
-			break;
 			await Promise.all(file_promises);
 		}
 	}
@@ -459,152 +429,194 @@ export default class MyBible extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+}
 
-	format_book_name(book: string, order: number): string {
-		let book_name = book;
-		if (this.settings.book_name_capitalization == "lower_case") {
-			book_name = book_name.toLowerCase();
-		} else if (this.settings.book_name_capitalization == "upper_case") {
-			book_name = book_name.toUpperCase();
+class BuildContext {
+	translation: string
+	translation_texts: TranslationData
+	books: Array<BookData>
+	book: BookData
+	last_book: BookData
+	next_book: BookData
+	chapter: number
+	last_chapter: number
+	next_chapter: number
+	chapters: ChapterData
+	last_chapters: ChapterData
+	next_chapters: ChapterData
+	chapter_verse_count: number
+	verses_text: string
+	verse: number
+
+	find_book(book_id:BookId):number {
+		for (let i of this.books.keys()) {
+			if (this.books[i].id === book_id) {
+				return i;
+			}
 		}
-
-		return this.settings.book_name_format
-			.replace(
-				/{order}/g,
-				String(order)
-					.padStart(2 * Number(this.settings.padded_order), "0")
-			)
-			.replace(/{book}/g, book)
+		throw new Error("No book by id ${book_id}");
 	}
 
-	format_chapter_body(
-		book: BookData,
-		last_book: BookData,
-		next_book: BookData,
-		chapter: number,
-		last_chapter: number,
-		next_chapter: number,
-		verses: string,
-	): string {
-		let book_name = book.name;
-		if (this.settings.book_name_capitalization == "lower_case") {
-			book_name = book.name.toLowerCase();
-		} else if (this.settings.book_name_capitalization == "upper_case") {
-			book_name = book.name.toUpperCase();
-		}
+	format_book_name(plugin:MyBible): string {
+		let casing = plugin.settings.book_name_capitalization;
+		let delim = plugin.settings.book_name_delimiter;
+		let book_name = this.to_case(this.book.name, casing, delim);
 
-		let last_book_name = last_book.name;
-		if (this.settings.book_name_capitalization == "lower_case") {
-			last_book_name = last_book_name.toLowerCase();
-		} else if (this.settings.book_name_capitalization == "upper_case") {
-			last_book_name = last_book_name.toUpperCase();
-		}
-
-		let next_book_name = next_book.name;
-		if (this.settings.book_name_capitalization == "lower_case") {
-			next_book_name = next_book_name.toLowerCase();
-		} else if (this.settings.book_name_capitalization == "upper_case") {
-			next_book_name = next_book_name.toUpperCase();
-		}
-		return this.settings.chapter_body_format
-			.replace(/{verses}/g, verses)
-			.replace(/{book}/g, book.name)
+		return plugin.settings.book_name_format
 			.replace(
 				/{order}/g,
-				String(book.order)
-					.padStart(2 * Number(this.settings.padded_order), "0")
+				String(this.book.id)
+					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
-			.replace(/{chapter}/g, String(chapter))
-			.replace(/{chapter_name}/g, this.format_chapter_name(
-				book_name,
-				book.order,
-				chapter,
-			))
-			.replace(/{last_chapter}/g, String(last_chapter))
-			.replace(/{last_chapter_name}/g, this.format_chapter_name(
-				last_book_name,
-				last_book.order,
-				last_chapter,
-			))
-			.replace(/{next_chapter}/g, String(next_chapter))
-			.replace(/{next_chapter_name}/g, this.format_chapter_name(
-				next_book_name,
-				next_book.order,
-				next_chapter,
-			));
+			.replace(/{book}/g, book_name)
+	}
+	
+	format_chapter_body(plugin:MyBible): string {
+		return plugin.settings.chapter_body_format
+			.replace(/{verses}/g, this.verses_text)
+			.replace(/{book}/g, this.book.name)
+			.replace(
+				/{order}/g,
+				String(this.book.id)
+					.padStart(2 * Number(plugin.settings.padded_order), "0")
+			)
+			.replace(/{chapter}/g, String(this.chapter))
+			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
+			.replace(/{last_chapter}/g, String(this.last_chapter))
+			.replace(/{last_chapter_name}/g, this.format_chapter_name(plugin, "last"))
+			.replace(/{next_chapter}/g, String(this.next_chapter))
+			.replace(/{next_chapter_name}/g, this.format_chapter_name(plugin, "next"));
 	}
 
-	format_chapter_name(book: string, order: Number, chapter: number): string {
-		let format = this.settings.chapter_name_format;
+	format_chapter_name(plugin:MyBible, tense:string="current"): string {
+		let format = plugin.settings.chapter_name_format;
 		if (format.length == 0) {
 			format = DEFAULT_SETTINGS.chapter_name_format;
 		}
 		let pad_by = 3;
-		// TODO: Readd verse count check for padding
-		// if (VERSE_COUNTS[book].length < 10) {
-		// 	pad_by = 1;
-		// } else if (VERSE_COUNTS[book].length < 100) {
-		// 	pad_by = 2;
-		// }
-
-		let book_name = book;
-		if (this.settings.book_name_capitalization == "lower_case") {
-			book_name = book_name.toLowerCase();
-		} else if (this.settings.book_name_capitalization == "upper_case") {
-			book_name = book_name.toUpperCase();
+		if (this.get_verse_count() < 10) {
+			pad_by = 1;
+		} else if (this.get_verse_count() < 100) {
+			pad_by = 2;
 		}
 
+		let casing = plugin.settings.book_name_capitalization;
+		let delim = plugin.settings.book_name_delimiter;
+		let book_name = "";
+		let chapter = -1;
+		switch (tense) {
+			case "current": {
+				book_name = this.to_case(this.book.name, casing, delim);
+				chapter = this.chapter
+				break;
+			}
+			case "last": {
+				book_name = this.to_case(this.last_book.name, casing, delim);
+				chapter = this.last_chapter
+				break;
+			}
+			case "next": {
+				book_name = this.to_case(this.next_book.name, casing, delim);
+				chapter = this.next_chapter
+				break;
+			}
+			default: throw new Error("Unmatched switch case at tense '{0}'".format(tense));
+		}
+
+		book_name = this.to_case(book_name, casing, delim);
+
 		return format
-			.replace(/{book}/g, book)
+			.replace(/{book}/g, book_name)
 			.replace(
 				/{order}/g,
-				String(order)
-					.padStart(2 * Number(this.settings.padded_order), "0")
+				String(this.book.id)
+					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(
 				/{chapter}/g,
 				String(chapter)
-					.padStart(pad_by * Number(this.settings.padded_chapter), "0",
-					),
+					.padStart(pad_by * Number(plugin.settings.padded_chapter), "0"),
 			);
 	}
 
-	format_verse_body(
-		book: string,
-		order: Number,
-		chapter: number,
-		verse: number,
-	): string {
-		let book_name = book;
-		if (this.settings.book_name_capitalization == "lower_case") {
-			book_name = book_name.toLowerCase();
-		} else if (this.settings.book_name_capitalization == "upper_case") {
-			book_name = book_name.toUpperCase();
-		}
+	format_verse_body(plugin:MyBible): string {
+		let book_name = this.to_case(
+			this.book.name,
+			plugin.settings.book_name_capitalization,
+			plugin.settings.book_name_delimiter,
+		);
 
-		return this.settings.verse_body_format
-			.replace(/{verse}/g, String(verse))
+		return plugin.settings.verse_body_format
+			.replace(/{verse}/g, String(this.verse))
 			.replace(/{book}/g, book_name)
+			.replace(/{book_id}/g, String(this.book.id))
 			.replace(
 				/{order}/g,
-				String(order)
-					.padStart(2 * Number(this.settings.padded_order), "0")
+				String(this.book.id)
+					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
-			.replace(/{chapter}/g, String(chapter))
-			.replace(/{chapter_name}/g, this.format_chapter_name(book_name, order, chapter))
+			.replace(/{chapter}/g, String(this.chapter))
+			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
+	}
+
+	set_book(book_id:BookId) {
+		let book_i = this.find_book(book_id);
+		this.book = this.books[book_i];
+
+		let last_book_i = this.chapter !== 1 ? book_i : book_i-1;
+		if (last_book_i === -1) {
+			last_book_i = this.books.length-1
+		}
+		this.last_book = this.books[last_book_i];
+		
+		let next_book_i = this.chapter !== this.book.chapters ? book_i : book_i+1;
+		if (next_book_i === this.books.length) {
+			next_book_i = 0
+		}
+		this.next_book = this.books[next_book_i];
+	}
+
+	set_chapter(chapter:number) {
+		this.chapter = chapter;
+		this.set_book(this.book.id);
+		this.last_chapter = chapter !== 1 ? chapter-1 : this.last_book.chapters
+		this.next_chapter = chapter !== this.book.chapters ? chapter+1 : 1
+	}
+
+	// Sets the capitalization of the given name depending on *name_case*.
+	to_case(name:string, name_case:string, delimeter:string): string {
+		if (name_case == "lower_case") {
+			return name.toLowerCase().replace(/ /g, delimeter);
+		} else if (name_case == "upper_case") {
+			return name.toUpperCase().replace(/ /g, delimeter);
+		}
+		return name.replace(/ /g, delimeter);
+	}
+
+	get_verse_count():number {
+		return this.translation_texts.books[this.book.id][this.chapter-1].length;
 	}
 }
 
 interface TranslationData {
 	translation: string;
-	books: Record<number, Array<ChapterData>>;
+	books: Record<BookId, Array<ChapterData>>;
+}
+
+interface BookCache {
+	translation: String;
+	book_id: number;
+	data: BookData | null;
+	mutex: Mutex;
 }
 
 interface BookData {
-	order: number;
+	id: number;
 	chapters: number;
 	name: string;
 }
+
+type BookId = number;
 
 interface ChapterCache {
 	translation: String;
@@ -623,6 +635,7 @@ interface VerseData {
 };
 
 class BibleAPI {
+	book_cache: Record<BookKey, BookCache> = {};
 	cache_clear_timer: Promise<null> | null = null;
 	cache_clear_timer_promise_err: (reason?: any) => void;
 	chapter_cache: Record<ChapterKey, ChapterCache> = {};
@@ -695,7 +708,7 @@ class BibleAPI {
 		let books = await this.get_books(translation);
 		for (let i of books.keys()) {
 			if (books[i].name === book_name) {
-				return i+1;
+				return books[i].id;
 			}
 		}
 		throw new Error(
@@ -705,7 +718,49 @@ class BibleAPI {
 	}
 
 
-	async get_bible(translation: string): Promise<TranslationData> {
+	async get_translation(translation: string): Promise<TranslationData> {
+		throw new Error("unimplemented")
+	}
+
+	async get_book(translation: string, book_id:BookId): Promise<BookData> {
+		let book_key = "{0} {1}".format(translation, String(book_id));
+
+		if (!(book_key in this.book_cache)) {
+			this.book_cache[book_key] = {
+				book_id: book_id,
+				translation: translation,
+				data: null,
+				mutex: new Mutex,
+			};
+		}
+
+		var cached = this.book_cache[book_key];
+		if (cached.data === null) {
+			await cached.mutex
+				.acquire()
+				.then(async () => {
+					cached.data = await this._get_book(translation, book_id);
+
+					cached.mutex.cancel();
+					cached.mutex.release();
+				})
+				.catch(err => {
+					if (err === E_CANCELED) {
+
+					} else {
+						throw new Error(err)
+					}
+				});
+		}
+
+		if (cached.data == null) {
+			throw new Error();
+		}
+
+		return cached.data;
+	}
+
+	async _get_book(translation: string, book_id:BookId): Promise<BookData> {
 		throw new Error("unimplemented")
 	}
 
@@ -827,6 +882,7 @@ class BibleAPI {
 	}
 }
 
+type BookKey = string;
 type ChapterKey = string;
 
 type Translations = Record<string, Translation>;
@@ -843,6 +899,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 	translations: Translations = {};
 	translation_maps: Record<string, Array<BookData>> = {};
 	cache_clear_timer: Promise<null> | null = null;
+	book_mutex:Mutex = new Mutex;
 
 	_chapter_key(translation: string, book_id: number, chapter: Number) {
 		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
@@ -857,7 +914,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 			book_data.push({
 				name: item["name"],
 				chapters: item["chapters"],
-				order: item["bookid"],
+				id: item["bookid"],
 			});
 		}
 		this.translation_maps[translation] = book_data;
@@ -912,7 +969,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 		return this.translation_maps[translation];
 	}
 
-	async get_bible(translation: string): Promise<TranslationData> {
+	async get_translation(translation: string): Promise<TranslationData> {
 		let verses = JSON.parse(
 			await httpGet(
 				"https://bolls.life/static/translations/{0}.json".format(translation)
@@ -949,8 +1006,30 @@ class BollsLifeBibleAPI extends BibleAPI {
 		return bible;
 	}
 
+	async _get_book(translation: string, book_id:BookId): Promise<BookData> {
+		let books = await this.get_books(translation);
+		for (let book of books) {
+			if (book.id == book_id) {
+				this.book_mutex.cancel();
+				this.book_mutex.release();
+				return book;
+			}
+		}
+		throw new Error();
+	}
+
 	async get_books(translation: string): Promise<BookData[]> {
-		return await this._get_translation_map(translation);
+		let books = await this._get_translation_map(translation);
+		books.sort(function(x, y) {
+			if (x.id < y.id) {
+				return -1;
+			}
+			if (x.id > y.id) {
+				return 1;
+			}
+			return 0;
+		});
+		return books;
 	}
 
 	async get_default_translation(): Promise<string> {
@@ -1174,7 +1253,7 @@ class DownloadBibleModal extends Modal {
 				.format(translation)
 		);
 
-		let bible = await this.plugin.bible_api.get_bible(translation);
+		let bible = await this.plugin.bible_api.get_translation(translation);
 		for (let book_name in bible.books) {
 			for (let chapter of Array(bible.books[book_name].length).keys()) {
 				let book_id = await this.plugin.bible_api.book_id(
@@ -1250,17 +1329,6 @@ class SettingsTab extends PluginSettingTab {
 			.setName("Book Formatting")
 
 		new Setting(containerEl)
-			.setName('Book name format')
-			.setDesc('Formatting for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
-			.addText(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.book_name_format)
-				.setValue(this.plugin.settings.book_name_format)
-				.onChange(async (value) => {
-					this.plugin.settings.book_name_format = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
 			.setName('Book name capitalization')
 			.setDesc('Capitalization for the names of the notes of each book.')
 			.addDropdown(drop => drop
@@ -1285,8 +1353,44 @@ class SettingsTab extends PluginSettingTab {
 				}))
 
 		new Setting(containerEl)
+			.setName('Book name delimiter')
+			.setDesc('The characters separating words in book names, such as the spaces in "1 John" or "Song of Solomon".')
+			.addText(text => text
+				.setPlaceholder('Example: "' + DEFAULT_SETTINGS.book_name_format + '"')
+				.setValue(this.plugin.settings.book_name_delimiter)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_delimiter = value;
+					await this.plugin.saveSettings();
+				}))
+
+		
+
+		new Setting(containerEl)
+			.setName('Book name format')
+			.setDesc('Formatting for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
+			.addText(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.book_name_format)
+				.setValue(this.plugin.settings.book_name_format)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_format = value;
+					await this.plugin.saveSettings();
+				}))
+
+		new Setting(containerEl)
 			.setHeading()
 			.setName("Chapter Formatting")
+
+		
+
+		new Setting(containerEl)
+			.setName('Padded chapter numbers')
+			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.padded_chapter)
+				.onChange(async (value) => {
+					this.plugin.settings.padded_chapter = value;
+					await this.plugin.saveSettings();
+				}))
 
 		new Setting(containerEl)
 			.setName('Chapter name format')
@@ -1300,29 +1404,16 @@ class SettingsTab extends PluginSettingTab {
 				}))
 
 		new Setting(containerEl)
-			.setName('Chapter name capitalization')
-			.setDesc('Capitalization for the names of the notes of each chapter of a book.')
-			.addDropdown(drop => drop
-				.addOption("lower_case", "Lower case")
-				.addOption("name_case", "Name case")
-				.addOption("upper_case", "Upper case")
-				.setValue(this.plugin.settings.chapter_name_capitalization)
+			.setName('Chapter body format')
+			.setDesc('Formatting for the body of chapter notes.')
+			.addTextArea(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.chapter_body_format)
+				.setValue(this.plugin.settings.chapter_body_format)
 				.onChange(async (value) => {
-					this.plugin.settings.chapter_name_capitalization = value;
-					await this.plugin.saveSettings();
-				})
-			)
-
-		new Setting(containerEl)
-			.setName('Padded chapter numbers')
-			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.padded_chapter)
-				.onChange(async (value) => {
-					this.plugin.settings.padded_chapter = value;
+					this.plugin.settings.chapter_body_format = value;
 					await this.plugin.saveSettings();
 				}))
-
+			
 		new Setting(containerEl)
 			.setName('Verse body format')
 			.setDesc('Formatting for the body of verses in chapters.')
@@ -1331,17 +1422,6 @@ class SettingsTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.verse_body_format)
 				.onChange(async (value) => {
 					this.plugin.settings.verse_body_format = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setName('Chapter body format')
-			.setDesc('Formatting for the body of chapter notes.')
-			.addTextArea(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.chapter_body_format)
-				.setValue(this.plugin.settings.chapter_body_format)
-				.onChange(async (value) => {
-					this.plugin.settings.chapter_body_format = value;
 					await this.plugin.saveSettings();
 				}))
 
