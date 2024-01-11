@@ -746,7 +746,7 @@ class BibleAPI {
 			};
 		}
 
-		var cached = this.book_cache[book_key];
+		let cached = this.book_cache[book_key];
 		if (cached.data === null) {
 			await cached.mutex
 				.acquire()
