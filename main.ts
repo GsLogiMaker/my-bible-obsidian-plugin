@@ -32,6 +32,7 @@ class MyBibleSettings {
 	chapter_name_format: string;
 	chapter_body_format: string;
 
+	build_with_dynamic_verses: boolean;
 	verse_body_format: string;
 
 	_built_translation: string;
@@ -58,10 +59,9 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	book_name_capitalization: "name_case",
 	padded_order: true,
 	padded_chapter: false,
+	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
-		+ "``` verse\n"
-		+ "{book_id} {chapter}:{verse}\n"
-		+ "```",
+		+ "{verse_body}",
 	chapter_body_format: "\n"
 		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]\n"
 		+ "\n"
@@ -369,8 +369,12 @@ export default class MyBible extends Plugin {
 		ctx.books = await this.bible_api.get_books(
 			this.settings._built_translation
 		);
-		ctx.translation_texts = await this.bible_api
-			.get_translation(ctx.translation);
+		ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation);
+
+		if (!this.settings.build_with_dynamic_verses) {
+			ctx.translation_texts = await this.bible_api
+				.get_translation(ctx.translation);
+		}
 
 		for (let book of ctx.books) {
 			ctx.set_book(book.id);
@@ -391,7 +395,10 @@ export default class MyBible extends Plugin {
 				let verse = 1;
 				while (verse != ctx.get_verse_count()+1) {
 					ctx.verse = verse;
-					ctx.verses_text += ctx.format_verse_body(this);
+					ctx.verses_text += ctx.format_verse_body(
+						this,
+						this.settings.build_with_dynamic_verses,
+					);
 					if (verse != ctx.get_verse_count()) {
 						ctx.verses_text += "\n";
 					}
@@ -447,6 +454,7 @@ class BuildContext {
 	chapter_verse_count: number
 	verses_text: string
 	verse: number
+	verse_counts: VerseCounts
 
 	find_book(book_id:BookId):number {
 		for (let i of this.books.keys()) {
@@ -539,14 +547,24 @@ class BuildContext {
 			);
 	}
 
-	format_verse_body(plugin:MyBible): string {
+	format_verse_body(plugin:MyBible, build_with_dynamic_verses:boolean): string {
 		let book_name = this.to_case(
 			this.book.name,
 			plugin.settings.book_name_capitalization,
 			plugin.settings.book_name_delimiter,
 		);
 
+		let verse_text = ""
+		if (build_with_dynamic_verses) {
+			verse_text = "``` verse\n"
+				+ "{book_id} {chapter} {verse} \n"
+				+ "```"
+		} else {
+			verse_text = this.translation_texts.books[this.book.id][this.chapter-1][this.verse-1]
+		}
+
 		return plugin.settings.verse_body_format
+			.replace(/{verse_text}/g, verse_text)
 			.replace(/{verse}/g, String(this.verse))
 			.replace(/{book}/g, book_name)
 			.replace(/{book_id}/g, String(this.book.id))
@@ -594,7 +612,15 @@ class BuildContext {
 	}
 
 	get_verse_count():number {
-		return this.translation_texts.books[this.book.id][this.chapter-1].length;
+		return this.verse_counts.get_count_for(this.book.id, this.chapter);
+	}
+}
+
+class VerseCounts {
+	books: Record<BookId, Record<number, number>>
+
+	get_count_for(book:BookId, chapter:number): number {
+		return this.books[book][chapter]
 	}
 }
 
@@ -892,6 +918,12 @@ class BibleAPI {
 		throw new Error("unimplemented")
 	}
 
+
+	async get_verse_count(translation:string): Promise<VerseCounts> {
+		throw new Error("unimplemented")
+	}
+
+
 	make_chapter_key(translation: string, book_id: number, chapter: Number) {
 		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
 	}
@@ -1085,6 +1117,15 @@ class BollsLifeBibleAPI extends BibleAPI {
 		);
 
 		return chapter_data[verse - 1] || "";
+	}
+
+	async get_verse_count(translation:string): Promise<VerseCounts> {
+		let json = JSON.parse(await httpGet(
+			"https://bolls.life/get-verse-counts/{0}/".format(translation)
+		));
+		let counts = new VerseCounts();
+		counts.books = json;
+		return counts
 	}
 }
 
@@ -1424,7 +1465,21 @@ class SettingsTab extends PluginSettingTab {
 					this.plugin.settings.chapter_body_format = value;
 					await this.plugin.saveSettings();
 				}))
+		
+		new Setting(containerEl)
+			.setHeading()
+			.setName("Verse Formatting")
 			
+		new Setting(containerEl)
+			.setName('Build with dynamic verses')
+			.setDesc('When ON, the text of verses will be saved as verse references that are loaded as you read it. When OFF, saves the text for your current translation into the built files.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.build_with_dynamic_verses)
+				.onChange(async (value) => {
+					this.plugin.settings.build_with_dynamic_verses = value;
+					await this.plugin.saveSettings();
+				}))
+
 		new Setting(containerEl)
 			.setName('Verse body format')
 			.setDesc('Formatting for the body of verses in chapters.')
