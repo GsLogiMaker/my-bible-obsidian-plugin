@@ -1,5 +1,5 @@
 # My Bible
-Your own customizable bible for your personal vault!
+Your own customizable markdown bible for your personal vault!
 
 ![](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/blob/444be699b5a81baddc5453856fc5da9fdadfce02/example.gif)
 
