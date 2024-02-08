@@ -156,6 +156,13 @@ export default class MyBible extends Plugin {
 				let bible_folder = this.app.vault.getAbstractFileByPath(bible_path);
 				if (bible_folder instanceof TFile) {
 					// Can't handle if bible path is a file. Abort
+					new ErrorModal(
+						this.app,
+						this,
+						"Failed to build bible",
+						"The bible folder defined in settings, \"{0}\", was expected to point to a folder, but it points to a file. Try changing the path to point to a folder, or change the file to a folder."
+							.format(this.settings.bible_folder),
+					).open();
 					return;
 				} else if (bible_folder === null) {
 					// Bible path doesn't exist. Create it
@@ -1131,6 +1138,42 @@ class BollsLifeBibleAPI extends BibleAPI {
 		let counts = new VerseCounts();
 		counts.books = json;
 		return counts
+	}
+}
+
+class ErrorModal extends Modal {
+	plugin: MyBible
+	title: string
+	body: string
+
+	constructor(app: App, plugin: MyBible, title:string, body:string) {
+		super(app);
+		this.plugin = plugin;
+		this.title = title;
+		this.body = body;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+
+		contentEl.createEl("h1", { text: this.title });
+		contentEl.createEl("span", { text: this.body });
+
+		contentEl.createEl("p", {});
+
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Close")
+					.onClick(() => {
+						this.close();
+					})
+			)
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
 	}
 }
 
