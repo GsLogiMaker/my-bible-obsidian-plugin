@@ -85,7 +85,6 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 }
 
 function httpGet(theUrl: string): Promise<string> {
-	console.log("MyBible : Fetching " + theUrl);
 	return new Promise(async (ok, err) => {
 		ok(await requestUrl(theUrl).text);
 	});
@@ -153,7 +152,18 @@ export default class MyBible extends Plugin {
 			name: 'Build bible',
 			callback: async () => {
 				let bible_path = normalizePath(this.settings.bible_folder);
-				this.app.vault.adapter.mkdir(bible_path);
+
+				let bible_folder = this.app.vault.getAbstractFileByPath(bible_path);
+				if (bible_folder instanceof TFile) {
+					// Can't handle if bible path is a file. Abort
+					return;
+				} else if (bible_folder === null) {
+					// Bible path doesn't exist. Create it
+					this.app.vault.adapter.mkdir(bible_path);
+				} else {
+					// Bible path is already a valid folder. No action needed
+				}
+
 				let folders_and_files = await this.app.vault.adapter.list(bible_path);
 				if (folders_and_files.files.length + folders_and_files.folders.length != 0) {
 					new ClearOldBibleFilesModal(this.app, this).open();
@@ -853,7 +863,6 @@ class BibleAPI {
 							} else {
 								cached.chapter_data = raw.split("\n");
 							}
-							console.log("MyBible : Loading ", cached_file_path);
 						}
 					}
 
@@ -953,9 +962,9 @@ class BollsLifeBibleAPI extends BibleAPI {
 	}
 
 	async _generate_translation_map(translation: string) {
-		let map: Array<Record<string, any>> = JSON.parse(await httpGet(
-			"https://bolls.life/get-books/{0}/".format(translation
-			)));
+		let map: Array<Record<string, any>> = await requestUrl(
+			"https://bolls.life/get-books/{0}/".format(translation)
+		).json;
 		let book_data: Array<BookData> = [];
 		for (let item of map) {
 			book_data.push({
@@ -999,10 +1008,6 @@ class BollsLifeBibleAPI extends BibleAPI {
 			return chapter_data;
 		} catch (e) {
 			if (e instanceof Error && e.message.startsWith("No book exists by name")) {
-				console.log(
-					"Failed to find chapter {0} in translation {1}, returning empty."
-						.format(String(book_id), translation)
-				)
 				return [];
 			}
 			throw e;
