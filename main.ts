@@ -61,7 +61,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	padded_chapter: false,
 	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
-		+ "{verse_body}",
+		+ "{verse_text}",
 	chapter_body_format: "\n"
 		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]\n"
 		+ "\n"
