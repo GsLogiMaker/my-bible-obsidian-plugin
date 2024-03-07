@@ -6,6 +6,7 @@ import {
 	PluginSettingTab,
 	Setting,
 	TFile,
+	TFolder,
 	normalizePath,
 	requestUrl,
 } from 'obsidian';
@@ -27,6 +28,7 @@ class MyBibleSettings {
 	book_name_format: string;
 	book_name_delimiter: string;
 	book_name_capitalization: string;
+	book_name_abbreviated: boolean;
 
 	padded_chapter: boolean;
 	chapter_name_format: string;
@@ -55,19 +57,20 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	bible_folder: "/Bible/",
 	book_name_format: "{order} {book}",
 	book_name_delimiter: " ",
-	chapter_name_format: "{book} {chapter}",
+	chapter_name_format: "{order} {book} {chapter}",
 	book_name_capitalization: "name_case",
+	book_name_abbreviated: false,
 	padded_order: true,
 	padded_chapter: false,
 	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
 		+ "{verse_text}",
 	chapter_body_format: "\n"
-		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]\n"
+		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
 		+ "\n"
 		+ "{verses}\n"
 		+ "\n"
-		+ "###### [[{last_chapter_name}]] | [[{book}]] | [[{next_chapter_name}]]"
+		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
 		+ "\n",
 	store_locally: false,
 
@@ -399,7 +402,7 @@ export default class MyBible extends Plugin {
 			// Book path
 			let book_path = bible_path;
 			if (this.settings.book_name_format.length != 0) {
-				book_path += "/" + ctx.format_book_name(this);
+				book_path += "/" + ctx.format_book_name(this, ctx.book, this.settings.book_name_capitalization);
 				this.app.vault.adapter.mkdir(normalizePath(book_path));
 			}
 
@@ -482,24 +485,43 @@ class BuildContext {
 		throw new Error("No book by id ${book_id}");
 	}
 
-	format_book_name(plugin:MyBible): string {
-		let casing = plugin.settings.book_name_capitalization;
+	abbreviate_book_name(name:string): string {
+		return name.replace(" ", "").slice(0,3);
+	}
+
+	format_book_name(plugin:MyBible, book:BookData, casing:string): string {
 		let delim = plugin.settings.book_name_delimiter;
-		let book_name = this.to_case(this.book.name, casing, delim);
+		let book_name = this.to_case(book.name, casing, delim);
+
+		if (plugin.settings.book_name_abbreviated) {
+			book_name = this.abbreviate_book_name(book_name);
+		}
 
 		return plugin.settings.book_name_format
 			.replace(
 				/{order}/g,
-				String(this.book.id)
+				String(book.id)
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{book}/g, book_name)
 	}
+
+	format_book_name_without_order(plugin:MyBible, book:BookData, casing:string): string {
+		let delim = plugin.settings.book_name_delimiter;
+		let book_name = this.to_case(book.name, casing, delim);
+
+		if (plugin.settings.book_name_abbreviated) {
+			book_name = this.abbreviate_book_name(book_name);
+		}
+
+		return book_name
+	}
 	
 	format_chapter_body(plugin:MyBible): string {
+		let casing = plugin.settings.book_name_capitalization;
 		return plugin.settings.chapter_body_format
 			.replace(/{verses}/g, this.verses_text)
-			.replace(/{book}/g, this.book.name)
+			.replace(/{book}/g, this.format_book_name_without_order(plugin, this.book, casing))
 			.replace(
 				/{order}/g,
 				String(this.book.id)
@@ -509,8 +531,14 @@ class BuildContext {
 			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
 			.replace(/{last_chapter}/g, String(this.last_chapter))
 			.replace(/{last_chapter_name}/g, this.format_chapter_name(plugin, "last"))
+			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(plugin, this.last_book, casing))
 			.replace(/{next_chapter}/g, String(this.next_chapter))
-			.replace(/{next_chapter_name}/g, this.format_chapter_name(plugin, "next"));
+			.replace(/{next_chapter_name}/g, this.format_chapter_name(plugin, "next"))
+			.replace(/{next_chapter_book}/g, this.format_book_name_without_order(plugin, this.next_book, casing))
+			.replace(/{first_chapter}/g, "1")
+			.replace(/{first_chapter_name}/g, this.format_chapter_name(plugin, "first"))
+			.replace(/{final_chapter}/g, String(this.book.chapters))
+			.replace(/{final_chapter_name}/g, this.format_chapter_name(plugin, "final"));
 	}
 
 	format_chapter_name(plugin:MyBible, tense:string="current"): string {
@@ -531,24 +559,32 @@ class BuildContext {
 		let chapter = -1;
 		switch (tense) {
 			case "current": {
-				book_name = this.to_case(this.book.name, casing, delim);
+				book_name = this.format_book_name_without_order(plugin, this.book, casing);
 				chapter = this.chapter
 				break;
 			}
 			case "last": {
-				book_name = this.to_case(this.last_book.name, casing, delim);
+				book_name = this.format_book_name_without_order(plugin, this.last_book, casing);
 				chapter = this.last_chapter
 				break;
 			}
 			case "next": {
-				book_name = this.to_case(this.next_book.name, casing, delim);
+				book_name = this.format_book_name_without_order(plugin, this.next_book, casing);
 				chapter = this.next_chapter
+				break;
+			}
+			case "first": {
+				book_name = this.format_book_name_without_order(plugin, this.book, casing);
+				chapter = 1
+				break;
+			}
+			case "final": {
+				book_name = this.format_book_name_without_order(plugin, this.book, casing);
+				chapter = this.book.chapters;
 				break;
 			}
 			default: throw new Error("Unmatched switch case at tense '{0}'".format(tense));
 		}
-
-		book_name = this.to_case(book_name, casing, delim);
 
 		return format
 			.replace(/{book}/g, book_name)
@@ -565,10 +601,10 @@ class BuildContext {
 	}
 
 	format_verse_body(plugin:MyBible, build_with_dynamic_verses:boolean): string {
-		let book_name = this.to_case(
-			this.book.name,
-			plugin.settings.book_name_capitalization,
-			plugin.settings.book_name_delimiter,
+		let book_name = this.format_book_name_without_order(
+			plugin,
+			this.book,
+			"current",
 		);
 
 		let verse_text = ""
@@ -592,6 +628,7 @@ class BuildContext {
 			)
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
+			.replace(/{final_chapter}/g, String(this.book.chapters))
 	}
 
 	set_book(book_id:BookId) {
@@ -1441,6 +1478,16 @@ class SettingsTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			)
+		
+		new Setting(containerEl)
+			.setName('Abbreviate book names')
+			.setDesc('Abbreviates book names to three letters so that, for example, "Genesis" becomes "Gen" and "1 Kings" becomes "1Ki". (May cause issues in some languages)')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.book_name_abbreviated)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_abbreviated = value;
+					await this.plugin.saveSettings();
+				}))
 
 		new Setting(containerEl)
 			.setName('Padded order numbers')
