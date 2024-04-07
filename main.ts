@@ -329,22 +329,26 @@ export default class MyBible extends Plugin {
 			});
 
 			let tags = text.matchAll(
-				/(?:<\s*([\w]*)\s*>(.*?)<\s*\/\1\s*>)|<\s*(br|\/br)\s*>|(.+?(?:(?=<\s*[/\\\w]*\s*>)|$))/gs
+				/(?:<\s*([\w]*)\s*>(.*?)<\s*\/\1\s*>)|<\s*(br|\/br|br\/)\s*>|(.+?(?:(?=<\s*[/\\\w]*\s*>)|$))/gs
 			);
 			for (let match of tags) {
 				let tag_type = match[1];
 				let tag_text = match[2];
 				let lone_tag_type = match[3];
 				let normal_text = match[4];
+
 				if (normal_text !== undefined) {
 					span.createSpan({
 						text: normal_text,
 					});
 				} else if (lone_tag_type === "br") {
 					span.createEl(lone_tag_type);
+				} else if (lone_tag_type === "br/" || lone_tag_type === "/br") {
+					span.createEl("br");
+					span.createSpan({
+						text: "\n",
+					});
 				} else if (lone_tag_type === "/J") {
-					/* Do nothing */
-				} else if (lone_tag_type === "br/") {
 					/* Do nothing */
 				} else if (tag_type === "sup") {
 					span.createEl(tag_type, { text: tag_text });
