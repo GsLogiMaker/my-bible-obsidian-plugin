@@ -11,7 +11,7 @@ Your own customizable markdown bible for your personal vault!
 - Switch to any translation you like without duplicate Bibles or breaking links!
 - See how the Bible connects to your thoughts in the Graph View!
 
-Are these features not enough? [Submit your own ideas here!](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new)
+Something missing, or needs improvement? [Submit your own ideas here!](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new)
 
 ### Inspiration
 I was inspired by Obsidian user [Joschua's](https://joschua.io/) idea of [linking all our notes with scripture](https://notes.joschua.io/60+Outputs/62+Projects/Bible+Study+Kit/Connecting+makes+you+engage+Scripture). He did this by including a copy of the Bible in his vault, with every chapter as one note and each verse as a header within it. I followed his instructions for doing this, and got the Bible in my own vault too, and it's great having the Bible to link to in my vault. I get to see visually how the Bible connects to my studies, my dreams, and more! However, the process was technical, and I don't think I could convince any non-programmer to do this for their own vault. I wanted to change that, so I made My Bible to streamline the process to just a few simple steps, without ever leaving Obsidian.
@@ -37,10 +37,12 @@ This plugin makes requests to [https://bolls.life/api/](https://bolls.life/api/)
 ### Troubleshooting
 If you have issues with the plugin [please report them here](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new).
 
+### Adding translations
+I do not directly control which translations are available, because My Bible relies on the Bolls Life API for its translations. However, you can reach the maintainer of Bolls Life [here](https://bolls.life/api/#contact_me).
+
 ### Support
 If you want to support my work, buy me a coffee! If you want to follow development of My Bible, follow me on [X/Twitter](https://twitter.com/GsLogiMaker).
 
 <a href="https://www.buymeacoffee.com/gslogimake0" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
-
 
 Enjoy My Bible! God bless!
