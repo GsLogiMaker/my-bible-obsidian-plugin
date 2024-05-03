@@ -508,6 +508,7 @@ class BuildContext {
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{book}/g, book_name)
+			.replace(/{translation}/g, String(plugin.settings.translation))
 	}
 
 	format_book_name_without_order(plugin:MyBible, book:BookData, casing:string): string {
@@ -542,7 +543,8 @@ class BuildContext {
 			.replace(/{first_chapter}/g, "1")
 			.replace(/{first_chapter_name}/g, this.format_chapter_name(plugin, "first"))
 			.replace(/{final_chapter}/g, String(this.book.chapters))
-			.replace(/{final_chapter_name}/g, this.format_chapter_name(plugin, "final"));
+			.replace(/{final_chapter_name}/g, this.format_chapter_name(plugin, "final"))
+			.replace(/{translation}/g, String(plugin.settings.translation))
 	}
 
 	format_chapter_name(plugin:MyBible, tense:string="current"): string {
@@ -601,7 +603,8 @@ class BuildContext {
 				/{chapter}/g,
 				String(chapter)
 					.padStart(pad_by * Number(plugin.settings.padded_chapter), "0"),
-			);
+			)
+			.replace(/{translation}/g, String(plugin.settings.translation))
 	}
 
 	format_verse_body(plugin:MyBible, build_with_dynamic_verses:boolean): string {
@@ -633,6 +636,7 @@ class BuildContext {
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
 			.replace(/{final_chapter}/g, String(this.book.chapters))
+			.replace(/{translation}/g, String(plugin.settings.translation))
 	}
 
 	set_book(book_id:BookId) {
