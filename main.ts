@@ -13,7 +13,6 @@ import {
 
 import { E_CANCELED, Mutex } from 'async-mutex';
 
-const BUILD_START_TOAST = "Bible build started!";
 const BUILD_END_TOAST = "Bible build finished!";
 
 // Remember to rename these classes and interfaces!
@@ -138,8 +137,9 @@ function is_numeric(string: string): boolean {
 
 
 export default class MyBible extends Plugin {
-	bible_api: BibleAPI;
-	settings: MyBibleSettings;
+	bible_api: BibleAPI
+	settings: MyBibleSettings
+	progress_notice: Notice | null
 
 	async onload() {
 		await this.loadSettings();
@@ -152,36 +152,9 @@ export default class MyBible extends Plugin {
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: 'create_bible_files',
-			name: 'Build bible',
+			name: 'Open bible builder',
 			callback: async () => {
-				let bible_path = normalizePath(this.settings.bible_folder);
-
-				let bible_folder = this.app.vault.getAbstractFileByPath(bible_path);
-				if (bible_folder instanceof TFile) {
-					// Can't handle if bible path is a file. Abort
-					new ErrorModal(
-						this.app,
-						this,
-						"Failed to build bible",
-						"The bible folder defined in settings, \"{0}\", was expected to point to a folder, but it points to a file. Try changing the path to point to a folder, or change the file to a folder."
-							.format(this.settings.bible_folder),
-					).open();
-					return;
-				} else if (bible_folder === null) {
-					// Bible path doesn't exist. Create it
-					this.app.vault.adapter.mkdir(bible_path);
-				} else {
-					// Bible path is already a valid folder. No action needed
-				}
-
-				let folders_and_files = await this.app.vault.adapter.list(bible_path);
-				if (folders_and_files.files.length + folders_and_files.folders.length != 0) {
-					new ClearOldBibleFilesModal(this.app, this).open();
-				} else {
-					new Notice(BUILD_START_TOAST);
-					await this.build_bible(bible_path);
-					new Notice(BUILD_END_TOAST);
-				}
+				new BuilderModal(this.app, this).open()
 			}
 		});
 
@@ -380,10 +353,38 @@ export default class MyBible extends Plugin {
 	}
 
 	onunload() {
-
 	}
 
-	async build_bible(bible_path: string) {
+	async build_bible() {
+		let bible_path = normalizePath(this.settings.bible_folder);
+
+		let bible_folder = this.app.vault.getAbstractFileByPath(bible_path);
+		if (bible_folder instanceof TFile) {
+			// Can't handle if bible path is a file. Abort
+			new ErrorModal(
+				this.app,
+				this,
+				"Failed to build bible",
+				"The bible folder defined in settings, \"{0}\", was expected to point to a folder, but it points to a file. Try changing the path to point to a folder, or change the file to a folder."
+					.format(this.settings.bible_folder),
+			).open();
+			return;
+		} else if (bible_folder === null) {
+			// Bible path doesn't exist. Create it
+			this.app.vault.adapter.mkdir(bible_path);
+		} else {
+			// Bible path is already a valid folder. No action needed
+		}
+
+		let folders_and_files = await this.app.vault.adapter.list(bible_path);
+		if (folders_and_files.files.length + folders_and_files.folders.length != 0) {
+			new ClearOldBibleFilesModal(this.app, this).open()
+		} else {
+			await this._build_bible(bible_path);
+		}
+	}
+
+	async _build_bible(bible_path: string) {
 		// TODO: Build bibles according to translation in settings
 		this.settings._built_translation = this.settings.translation;
 		await this.saveSettings();
@@ -399,6 +400,14 @@ export default class MyBible extends Plugin {
 			ctx.translation_texts = await this.bible_api
 				.get_translation(ctx.translation);
 		}
+
+		
+		let built_chapter_count = 0
+		let total_chapter_count = 0
+		for (const i in ctx.books) {
+			total_chapter_count += ctx.books[i].chapters
+		}
+		this.show_toast_progress(0, total_chapter_count)
 
 		for (let book of ctx.books) {
 			ctx.set_book(book.id);
@@ -448,9 +457,25 @@ export default class MyBible extends Plugin {
 						)
 					);
 				}
+
+				built_chapter_count += 1
+				this.show_toast_progress(built_chapter_count, total_chapter_count)
 			}
 			await Promise.all(file_promises);
 		}
+
+		this.progress_notice?.hide()
+		this.progress_notice = null
+		new Notice(BUILD_END_TOAST)
+	}
+
+	show_toast_progress(progress: number, finish: number) {
+		if (this.progress_notice == null) {
+			this.progress_notice = new Notice("", 0)
+		}
+		this.progress_notice.setMessage(
+			"Building bible... ({0}/{1})".format(String(progress), String(finish))
+		)
 	}
 
 	async loadSettings() {
@@ -458,7 +483,16 @@ export default class MyBible extends Plugin {
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
+		let saving:Record<string, any> = {}
+		Object.assign(saving, this.settings)
+		for (const key in saving) {
+			let value:any = (DEFAULT_SETTINGS as Record<string, any>)[key]
+			if (saving[key] === value) {
+				delete saving[key]
+			}
+		}
+
+		await this.saveData(saving)
 	}
 }
 
@@ -1186,6 +1220,339 @@ class BollsLifeBibleAPI extends BibleAPI {
 	}
 }
 
+class BuilderModal extends Modal {
+	plugin: MyBible
+
+	constructor(app: App, plugin: MyBible) {
+		super(app);
+		this.plugin = plugin;
+		this.render();
+	}
+
+	render() {
+		let containerEl = this.contentEl;
+
+		containerEl.createEl("h1", {text: "Bible builder"})
+
+		// Top settings
+
+		this.renderBibleFolder(new Setting(containerEl));
+
+		new Setting(containerEl)
+			.setName('Translation')
+			.setDesc('The version of the Bible to display.')
+			.addDropdown(async drop => {
+				let translations = await this.plugin.bible_api.get_translations();
+				
+				let translations_list = [];
+				for (const key in translations) {
+					translations_list.push(key);
+				}
+				translations_list = translations_list.sort((a, b) => {
+					if (translations[a].language < translations[b].language) {
+						return -1;
+					}
+					if (translations[a].language > translations[b].language) {
+						return 1;
+					}
+
+					if (a < b) {
+						return -1;
+					}
+					if (a > b) {
+						return 1;
+					}
+
+					return 0;
+				})
+
+				for (const i in translations_list) {
+					let key = translations_list[i];
+					drop.addOption(
+						key,
+						"{1} - {2} - {0}".format(
+							translations[key].language,
+							key,
+							translations[key].display_name,
+						)
+					);
+				}
+				drop.onChange(async value => {
+					this.plugin.settings.translation = value;
+					await this.plugin.saveSettings();
+				})
+				drop.setValue(this.plugin.settings.translation);
+			})
+		;
+
+		this.renderButton(new Setting(containerEl));
+		
+		// Books
+		
+		containerEl.createEl("h3", { text: "Books" });
+		
+		this.renderBookFormat(new Setting(containerEl));
+		
+		this.renderNameDelimeter(new Setting(containerEl));
+			
+		this.renderBookCapitalization(new Setting(containerEl));
+			
+		this.renderBookAbbreviation(new Setting(containerEl));
+
+		this.renderPaddedNums(new Setting(containerEl));
+
+		// Chapters
+
+		containerEl.createEl("h3", { text: "Chapters" });
+		
+		this.renderChapterName(new Setting(containerEl));
+
+		this.renderChapterFormat(new Setting(containerEl));
+					
+		new Setting(containerEl)
+			.setName('Pad numbers')
+			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.padded_chapter)
+				.onChange(async (value) => {
+					this.plugin.settings.padded_chapter = value;
+					await this.plugin.saveSettings();
+				}))
+
+		// Verses
+
+		containerEl.createEl("h3", { text: "Verses" });
+
+		new Setting(containerEl)
+			.setName('Format')
+			.setDesc('Formatting for individual verses.')
+			.addTextArea(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.verse_body_format)
+				.setValue(this.plugin.settings.verse_body_format)
+				.onChange(async (value) => {
+					this.plugin.settings.verse_body_format = value;
+					await this.plugin.saveSettings();
+				}))
+
+		new Setting(containerEl)
+			.setName('Build with dynamic verses')
+			.setDesc('When ON, the text of verses will be saved as verse references that are loaded as you read it. When OFF, saves the text for your current translation into the built files.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.build_with_dynamic_verses)
+				.onChange(async (value) => {
+					this.plugin.settings.build_with_dynamic_verses = value;
+					await this.plugin.saveSettings();
+				}))
+
+		// After
+
+		this.renderButton(new Setting(containerEl));
+	}
+
+	// Top renderers
+
+	renderBibleFolder(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Folder')
+			.setDesc('A path to the folder where all the files for the bible will be placed. If the path does not exist it will be created.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.bible_folder
+						= DEFAULT_SETTINGS.bible_folder;
+					this.renderBibleFolder(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.bible_folder)
+				.setValue(this.plugin.settings.bible_folder)
+				.onChange(async (value) => {
+					this.plugin.settings.bible_folder = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderButton(setting: Setting) {
+		setting
+			.addButton(btn => btn
+				.setButtonText("Build")
+				.setCta()
+				.onClick(async _ => {
+					this.close()
+					await this.plugin.build_bible()
+				})
+			)
+		;
+	}
+
+	// Book renderers
+
+	renderBookFormat(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Name format')
+			.setDesc('Formatting for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.book_name_format
+						= DEFAULT_SETTINGS.book_name_format;
+					this.renderBookFormat(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.book_name_format)
+				.setValue(this.plugin.settings.book_name_format)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderBookAbbreviation(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Abbreviate names')
+			.setDesc('Abbreviates the names of books to three letters so that, for example, "Genesis" becomes "Gen" and "1 Kings" becomes "1Ki". (May cause issues in some translations.)')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.book_name_abbreviated)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_abbreviated = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderBookCapitalization(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Name capitalization')
+			.setDesc('Capitalization for the names of each book.')
+			.addDropdown(drop => drop
+				.addOption("lower_case", "Lower case")
+				.addOption("name_case", "Name case")
+				.addOption("upper_case", "Upper case")
+				.setValue(this.plugin.settings.book_name_capitalization)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_capitalization = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderNameDelimeter(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Name delimiter')
+			.setDesc('The characters separating words in book names, such as the spaces in "1 John" or "Song of Solomon".')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.book_name_delimiter
+						= DEFAULT_SETTINGS.book_name_delimiter;
+					this.renderNameDelimeter(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder('Example: "' + DEFAULT_SETTINGS.book_name_format + '"')
+				.setValue(this.plugin.settings.book_name_delimiter)
+				.onChange(async (value) => {
+					this.plugin.settings.book_name_delimiter = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderPaddedNums(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Pad order numbers')
+			.setDesc('When ON, changes "{order}" in the names of book folders to be padded with extra zeros. For example, "1 Genesis" would become "01 Gensis" when turned ON.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.padded_order)
+				.onChange(async (value) => {
+					this.plugin.settings.padded_order = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	// Chapter renderers
+
+	renderChapterFormat(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Body format')
+			.setDesc('Formats the contents of chapters.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.chapter_body_format
+						= DEFAULT_SETTINGS.chapter_body_format;
+					this.renderChapterFormat(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addTextArea(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.chapter_body_format)
+				.setValue(this.plugin.settings.chapter_body_format)
+				.onChange(async (value) => {
+					this.plugin.settings.chapter_body_format = value;
+					await this.plugin.saveSettings();
+					}
+				)
+			)
+		;
+	}
+
+	renderChapterName(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Name format')
+			.setDesc('Formats the names of chapter. For example, "{book} {chapter}" would become "Psalms 23.md".')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.chapter_name_format
+						= DEFAULT_SETTINGS.chapter_name_format;
+					this.renderChapterName(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder(this.plugin.settings.chapter_name_format)
+				.setValue(this.plugin.settings.chapter_name_format)
+				.onChange(async (value) => {
+					this.plugin.settings.chapter_name_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	refresh() {
+		this.contentEl.empty()
+		this.render()
+	}
+}
+
 class ErrorModal extends Modal {
 	plugin: MyBible
 	title: string
@@ -1272,7 +1639,7 @@ class ClearCacheFilesModal extends Modal {
 }
 
 class ClearOldBibleFilesModal extends Modal {
-	plugin: MyBible;
+	plugin: MyBible
 
 	constructor(app: App, plugin: MyBible) {
 		super(app);
@@ -1300,6 +1667,7 @@ class ClearOldBibleFilesModal extends Modal {
 					.setButtonText("Cancel")
 					.onClick(() => {
 						this.close();
+						
 					})
 			)
 			.addButton((btn) =>
@@ -1308,9 +1676,7 @@ class ClearOldBibleFilesModal extends Modal {
 					.setCta()
 					.onClick(async () => {
 						this.close();
-						new Notice(BUILD_START_TOAST);
-						await this.plugin.build_bible(bible_path);
-						new Notice(BUILD_END_TOAST);
+						await this.plugin._build_bible(bible_path);
 					})
 			)
 			.addButton((btn) =>
@@ -1319,7 +1685,8 @@ class ClearOldBibleFilesModal extends Modal {
 					.setCta()
 					.onClick(async () => {
 						this.close();
-						new Notice(BUILD_START_TOAST);
+						let notice = new Notice("Clearing bible folder...", 0)
+
 						let list = await this.app.vault.adapter.list(bible_path);
 						for (let path of list.files) {
 							let abstract = this.app.vault.getAbstractFileByPath(
@@ -1337,8 +1704,9 @@ class ClearOldBibleFilesModal extends Modal {
 								await this.app.vault.delete(abstract, true);
 							}
 						}
-						await this.plugin.build_bible(bible_path);
-						new Notice(BUILD_END_TOAST);
+
+						notice.hide()
+						await this.plugin._build_bible(bible_path);
 					})
 			);
 	}
@@ -1473,63 +1841,7 @@ class SettingsTab extends PluginSettingTab {
 			.setHeading()
 			.setName("Book Formatting")
 
-		new Setting(containerEl)
-			.setName('Book name capitalization')
-			.setDesc('Capitalization for the names of the notes of each book.')
-			.addDropdown(drop => drop
-				.addOption("lower_case", "Lower case")
-				.addOption("name_case", "Name case")
-				.addOption("upper_case", "Upper case")
-				.setValue(this.plugin.settings.book_name_capitalization)
-				.onChange(async (value) => {
-					this.plugin.settings.book_name_capitalization = value;
-					await this.plugin.saveSettings();
-				})
-			)
 		
-		new Setting(containerEl)
-			.setName('Abbreviate book names')
-			.setDesc('Abbreviates book names to three letters so that, for example, "Genesis" becomes "Gen" and "1 Kings" becomes "1Ki". (May cause issues in some languages)')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.book_name_abbreviated)
-				.onChange(async (value) => {
-					this.plugin.settings.book_name_abbreviated = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setName('Padded order numbers')
-			.setDesc('When ON, changes "{order}" in the names of book folders to be padded with extra zeros. For example, "1 Genesis" would become "01 Gensis" when turned ON.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.padded_order)
-				.onChange(async (value) => {
-					this.plugin.settings.padded_order = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setName('Book name delimiter')
-			.setDesc('The characters separating words in book names, such as the spaces in "1 John" or "Song of Solomon".')
-			.addText(text => text
-				.setPlaceholder('Example: "' + DEFAULT_SETTINGS.book_name_format + '"')
-				.setValue(this.plugin.settings.book_name_delimiter)
-				.onChange(async (value) => {
-					this.plugin.settings.book_name_delimiter = value;
-					await this.plugin.saveSettings();
-				}))
-
-		
-
-		new Setting(containerEl)
-			.setName('Book name format')
-			.setDesc('Formatting for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
-			.addText(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.book_name_format)
-				.setValue(this.plugin.settings.book_name_format)
-				.onChange(async (value) => {
-					this.plugin.settings.book_name_format = value;
-					await this.plugin.saveSettings();
-				}))
 
 		new Setting(containerEl)
 			.setHeading()
