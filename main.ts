@@ -53,7 +53,7 @@ class MyBibleSettings {
 
 const DEFAULT_SETTINGS: MyBibleSettings = {
 	translation: "",
-	bible_folder: "/Bible/",
+	bible_folder: "/MyBible/",
 	book_name_format: "{order} {book}",
 	book_name_delimiter: " ",
 	chapter_name_format: "{order} {book} {chapter}",
