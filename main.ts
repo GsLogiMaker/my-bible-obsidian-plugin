@@ -36,6 +36,14 @@ class MyBibleSettings {
 	build_with_dynamic_verses: boolean;
 	verse_body_format: string;
 
+	index_name_format: string
+	index_format: string
+	index_link_format: string
+
+	book_index_name_format: string
+	book_index_format: string
+	book_index_link_format: string
+
 	_built_translation: string;
 
 	async set_translation(val: string, plugin: MyBible) {
@@ -53,7 +61,7 @@ class MyBibleSettings {
 
 const DEFAULT_SETTINGS: MyBibleSettings = {
 	translation: "",
-	bible_folder: "/MyBible/",
+	bible_folder: "/My Bible/",
 	book_name_format: "{order} {book}",
 	book_name_delimiter: " ",
 	chapter_name_format: "{order} {book} {chapter}",
@@ -65,12 +73,25 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	verse_body_format: "###### {verse}\n"
 		+ "{verse_text}",
 	chapter_body_format: "\n"
-		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
+		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
 		+ "\n"
 		+ "{verses}\n"
 		+ "\n"
-		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
+		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
 		+ "\n",
+	index_name_format: "--- {translation} ---",
+	index_format: "### Old testament\n"
+		+ "{old_testament}\n"
+		+ "### New testament\n"
+		+ "{new_testament}\n"
+		+ "### Apocrypha\n"
+		+ "{apocrypha}",
+	index_link_format: "- [[{book_index}|{book}]]",
+	book_index_name_format: "--- {book} ---",
+	book_index_format: "[[{index}|{translation}]]\n"
+		+ "\n"
+		+ "{chapters}\n",
+	book_index_link_format: "- [[{chapter_name}|{chapter}]]",
 	store_locally: false,
 
 	_built_translation: "",
@@ -134,6 +155,19 @@ function is_numeric(string: string): boolean {
 	return true;
 }
 
+
+async function save_file(path: string, content: string) {
+	let file_path = normalizePath(path);
+	let file = this.app.vault.getAbstractFileByPath(file_path)
+	if (file instanceof TFile) {
+		await this.app.vault.modify(file, content)
+	} else if (file === null) {
+		await this.app.vault.create(
+			file_path,
+			content,
+		)
+	}
+}
 
 
 export default class MyBible extends Plugin {
@@ -385,23 +419,22 @@ export default class MyBible extends Plugin {
 	}
 
 	async _build_bible(bible_path: string) {
+		this.show_toast_progress(0, null)
+
 		// TODO: Build bibles according to translation in settings
 		this.settings._built_translation = this.settings.translation;
 		await this.saveSettings();
-		
+
 		let ctx = new BuildContext;
+		ctx.plugin = this
 		ctx.translation = this.settings._built_translation;
 		ctx.books = await this.bible_api.get_books(
 			this.settings._built_translation
-		);
+			);
 		ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation);
 
-		if (!this.settings.build_with_dynamic_verses) {
-			ctx.translation_texts = await this.bible_api
-				.get_translation(ctx.translation);
-		}
 
-		
+		// Notify progress
 		let built_chapter_count = 0
 		let total_chapter_count = 0
 		for (const i in ctx.books) {
@@ -409,8 +442,22 @@ export default class MyBible extends Plugin {
 		}
 		this.show_toast_progress(0, total_chapter_count)
 
+		if (!this.settings.build_with_dynamic_verses) {
+			ctx.translation_texts = await this.bible_api
+				.get_translation(ctx.translation);
+		}
+
+		// Index
+		await save_file(
+			"{0}/{1}.md".format(bible_path, ctx.format_index_name()),
+			ctx.format_index(),
+		)
+
+		let file_promises: Array<Promise<any>> = [];
+
 		for (let book of ctx.books) {
 			ctx.set_book(book.id);
+
 
 			// Book path
 			let book_path = bible_path;
@@ -419,7 +466,13 @@ export default class MyBible extends Plugin {
 				this.app.vault.adapter.mkdir(normalizePath(book_path));
 			}
 
-			let file_promises: Array<Promise<any>> = [];
+			// Book index
+			file_promises.push(save_file(
+				"{0}/{1}.md".format(book_path, ctx.format_book_index_name(ctx.book)),
+				ctx.format_book_index(ctx.book),
+			))
+
+			
 			for (const chapter_i of Array(ctx.book.chapters).keys()) {
 				ctx.set_chapter(chapter_i+1);
 
@@ -439,43 +492,52 @@ export default class MyBible extends Plugin {
 				}
 
 				// Chapter name
-				let chapter_note_name = ctx.format_chapter_name(this);
+				let chapter_note_name = ctx.format_chapter_name();
 
 				// Chapter body
 				let note_body = ctx.format_chapter_body(this);
 
 				// Save file
-				let file_path = normalizePath(book_path + "/" + chapter_note_name + ".md");
-				let file = this.app.vault.getAbstractFileByPath(file_path);
-				if (file instanceof TFile) {
-					file_promises.push(this.app.vault.modify(file, note_body));
-				} else if (file === null) {
-					file_promises.push(
-						this.app.vault.create(
-							file_path,
-							note_body,
-						)
-					);
-				}
+				let file_path = book_path + "/" + chapter_note_name + ".md"
 
-				built_chapter_count += 1
-				this.show_toast_progress(built_chapter_count, total_chapter_count)
+				file_promises.push(new Promise(async () => {
+					await save_file(file_path, note_body)
+					built_chapter_count += 1
+					this.show_toast_progress(
+						built_chapter_count,
+						total_chapter_count,
+					)
+				}))
 			}
-			await Promise.all(file_promises);
 		}
 
-		this.progress_notice?.hide()
-		this.progress_notice = null
-		new Notice(BUILD_END_TOAST)
+		file_promises.push(new Promise(() => {
+			
+		}))
+
+		await Promise.all(file_promises);
 	}
 
-	show_toast_progress(progress: number, finish: number) {
+	show_toast_progress(progress: number, finish: number|null) {
+		if (progress == finish && finish != null) {
+			this.progress_notice?.hide()
+			this.progress_notice = null
+			new Notice(BUILD_END_TOAST)
+			return
+		}
+
 		if (this.progress_notice == null) {
 			this.progress_notice = new Notice("", 0)
 		}
-		this.progress_notice.setMessage(
-			"Building bible... ({0}/{1})".format(String(progress), String(finish))
-		)
+
+		let msg = ""
+		if (finish == null) {
+			msg = "Building bible..."
+		} else {
+			msg = "Building bible... ({0}/{1})"
+				.format(String(progress), String(finish))
+		}
+		this.progress_notice.setMessage(msg)
 	}
 
 	async loadSettings() {
@@ -513,6 +575,7 @@ class BuildContext {
 	verses_text: string
 	verse: number
 	verse_counts: VerseCounts
+	plugin: MyBible
 
 	find_book(book_id:BookId):number {
 		for (let i of this.books.keys()) {
@@ -567,22 +630,23 @@ class BuildContext {
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(this.chapter))
-			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
+			.replace(/{chapter_name}/g, this.format_chapter_name())
+			.replace(/{chapter_index}/g, this.format_book_index_name(this.book))
 			.replace(/{last_chapter}/g, String(this.last_chapter))
-			.replace(/{last_chapter_name}/g, this.format_chapter_name(plugin, "last"))
+			.replace(/{last_chapter_name}/g, this.format_chapter_name("last"))
 			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(plugin, this.last_book, casing))
 			.replace(/{next_chapter}/g, String(this.next_chapter))
-			.replace(/{next_chapter_name}/g, this.format_chapter_name(plugin, "next"))
+			.replace(/{next_chapter_name}/g, this.format_chapter_name("next"))
 			.replace(/{next_chapter_book}/g, this.format_book_name_without_order(plugin, this.next_book, casing))
 			.replace(/{first_chapter}/g, "1")
-			.replace(/{first_chapter_name}/g, this.format_chapter_name(plugin, "first"))
+			.replace(/{first_chapter_name}/g, this.format_chapter_name("first"))
 			.replace(/{final_chapter}/g, String(this.book.chapters))
-			.replace(/{final_chapter_name}/g, this.format_chapter_name(plugin, "final"))
+			.replace(/{final_chapter_name}/g, this.format_chapter_name("final"))
 			.replace(/{translation}/g, String(plugin.settings.translation))
 	}
 
-	format_chapter_name(plugin:MyBible, tense:string="current"): string {
-		let format = plugin.settings.chapter_name_format;
+	format_chapter_name(tense:string="current", custom_chapter:number|null = null): string {
+		let format = this.plugin.settings.chapter_name_format;
 		if (format.length == 0) {
 			format = DEFAULT_SETTINGS.chapter_name_format;
 		}
@@ -593,52 +657,68 @@ class BuildContext {
 			pad_by = 2;
 		}
 
-		let casing = plugin.settings.book_name_capitalization;
-		let delim = plugin.settings.book_name_delimiter;
+		let casing = this.plugin.settings.book_name_capitalization;
+		let delim = this.plugin.settings.book_name_delimiter;
 		let book_name = "";
-		let chapter = -1;
+		let order = -1;
+		let chapter = custom_chapter
 		switch (tense) {
 			case "current": {
-				book_name = this.format_book_name_without_order(plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				order = this.book.id
 				chapter = this.chapter
 				break;
 			}
 			case "last": {
-				book_name = this.format_book_name_without_order(plugin, this.last_book, casing);
+				book_name = this.format_book_name_without_order(this.plugin, this.last_book, casing);
+				order = this.last_book.id
 				chapter = this.last_chapter
 				break;
 			}
 			case "next": {
-				book_name = this.format_book_name_without_order(plugin, this.next_book, casing);
+				book_name = this.format_book_name_without_order(this.plugin, this.next_book, casing);
+				order = this.next_book.id
 				chapter = this.next_chapter
 				break;
 			}
 			case "first": {
-				book_name = this.format_book_name_without_order(plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				order = this.book.id
 				chapter = 1
 				break;
 			}
 			case "final": {
-				book_name = this.format_book_name_without_order(plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				order = this.book.id
 				chapter = this.book.chapters;
 				break;
 			}
+			case "custom": {
+				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				order = this.book.id
+				chapter = custom_chapter;
+				break;
+			}
 			default: throw new Error("Unmatched switch case at tense '{0}'".format(tense));
+		}
+
+		if (chapter == null) {
+			throw new Error("Chapter is null");
 		}
 
 		return format
 			.replace(/{book}/g, book_name)
 			.replace(
 				/{order}/g,
-				String(this.book.id)
-					.padStart(2 * Number(plugin.settings.padded_order), "0")
+				String(order)
+					.padStart(2 * Number(this.plugin.settings.padded_order), "0")
 			)
 			.replace(
 				/{chapter}/g,
 				String(chapter)
-					.padStart(pad_by * Number(plugin.settings.padded_chapter), "0"),
+					.padStart(pad_by * Number(this.plugin.settings.padded_chapter), "0"),
 			)
-			.replace(/{translation}/g, String(plugin.settings.translation))
+			.replace(/{translation}/g, String(this.translation))
 	}
 
 	format_verse_body(plugin:MyBible, build_with_dynamic_verses:boolean): string {
@@ -668,9 +748,101 @@ class BuildContext {
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(this.chapter))
-			.replace(/{chapter_name}/g, this.format_chapter_name(plugin))
+			.replace(/{chapter_name}/g, this.format_chapter_name())
 			.replace(/{final_chapter}/g, String(this.book.chapters))
 			.replace(/{translation}/g, String(plugin.settings.translation))
+	}
+
+	format_book_index(book: BookData): string {
+		let book_name = this.format_book_name_without_order(
+			this.plugin,
+			book,
+			this.plugin.settings.book_name_capitalization,
+		);
+
+		let chapter_links = ""
+
+		// Format chapter links
+		for (let i = 0; i != book.chapters; i++) {
+			let link = this.plugin.settings.book_index_link_format
+				.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+				.replace(/{book}/g, book_name)
+				.replace(/{book_index}/g, this.format_book_index_name(book))
+				.replace(/{translation}/g, String(this.plugin.settings.translation))
+				.replace(/{chapter}/g, String(i+1))
+				.replace(/{chapter_name}/g, this.format_chapter_name("custom", i+1))
+			;
+			if (i != book.chapters-1) {
+				link += "\n"
+			}
+			chapter_links += link
+		}
+
+		return this.plugin.settings.book_index_format
+			.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{book}/g, book_name)
+			.replace(/{book_index}/g, this.format_book_index_name(book))
+			.replace(/{translation}/g, String(this.plugin.settings.translation))
+			.replace(/{index}/g, this.format_index_name())
+			.replace(/{chapters}/g, chapter_links)
+		;
+	}
+
+	format_book_index_name(book: BookData): string {
+		let book_name = this.format_book_name_without_order(
+			this.plugin,
+			book,
+			this.plugin.settings.book_name_capitalization,
+		);
+		return this.plugin.settings.book_index_name_format
+			.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{book}/g, book_name)
+			.replace(/{translation}/g, String(this.plugin.settings.translation))
+	}
+	
+	format_index_name(): string {
+		return this.plugin.settings.index_name_format
+			.replace(/{translation}/g, this.translation)
+	}
+
+	format_index(): string {
+		let old_t_links = ""
+		let new_t_links = ""
+		let apocr_links = ""
+
+		// Format all book links
+		for (const i in this.books) {
+			let book_name = this.format_book_name_without_order(
+				this.plugin,
+				this.books[i],
+				this.plugin.settings.book_name_capitalization,
+			);
+
+			let link = this.plugin.settings.index_link_format
+				.replace(/{order}/g, String(this.books[i].id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+				.replace(/{book}/g, book_name)
+				.replace(/{book_index}/g, this.format_book_index_name(this.books[i]))
+				.replace(/{translation}/g, String(this.plugin.settings.translation))
+				+ '\n'
+
+			if (Number(i) < 40) {
+				old_t_links += link 
+			} else if (Number(i) < 67) {
+				new_t_links += link 
+			} else {
+				apocr_links += link 
+			}
+		}
+
+		old_t_links = old_t_links.slice(0, old_t_links.length-1)
+		new_t_links = new_t_links.slice(0, new_t_links.length-1)
+		apocr_links = apocr_links.slice(0, apocr_links.length-1)
+
+		return this.plugin.settings.index_format
+			.replace(/{translation}/g, this.translation)
+			.replace(/{old_testament}/g, old_t_links)
+			.replace(/{new_testament}/g, new_t_links)
+			.replace(/{apocrypha}/g, apocr_links)
 	}
 
 	set_book(book_id:BookId) {
@@ -699,12 +871,13 @@ class BuildContext {
 
 	// Sets the capitalization of the given name depending on *name_case*.
 	to_case(name:string, name_case:string, delimeter:string): string {
+		name = name.replace(/ /g, delimeter)
 		if (name_case == "lower_case") {
-			return name.toLowerCase().replace(/ /g, delimeter);
+			name = name.toLowerCase()
 		} else if (name_case == "upper_case") {
-			return name.toUpperCase().replace(/ /g, delimeter);
+			name = name.toUpperCase()
 		}
-		return name.replace(/ /g, delimeter);
+		return name;
 	}
 
 	get_verse_count():number {
@@ -1344,6 +1517,12 @@ class BuilderModal extends Modal {
 					await this.plugin.saveSettings();
 				}))
 
+		// Index
+		containerEl.createEl("h3", { text: "Index" });
+		this.renderIndexName(new Setting(containerEl))
+		this.renderIndexBookLink(new Setting(containerEl))
+		this.renderIndexBody(new Setting(containerEl))
+
 		// After
 
 		this.renderButton(new Setting(containerEl));
@@ -1547,6 +1726,86 @@ class BuilderModal extends Modal {
 		;
 	}
 
+	// Index
+
+	renderIndexName(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Name format')
+			.setDesc('Formats the name of the book index.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.index_link_format
+						= DEFAULT_SETTINGS.index_name_format;
+					this.renderIndexName(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.index_name_format)
+				.setValue(this.plugin.settings.index_name_format)
+				.onChange(async (value) => {
+					this.plugin.settings.index_name_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderIndexBookLink(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Book element format')
+			.setDesc('Formats the appearance of each book listed in  book index.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.index_link_format
+						= DEFAULT_SETTINGS.index_link_format;
+					this.renderIndexBookLink(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.index_link_format)
+				.setValue(this.plugin.settings.index_link_format)
+				.onChange(async (value) => {
+					this.plugin.settings.index_link_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderIndexBody(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Body format')
+			.setDesc('Formats the body of the book index.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.index_format
+						= DEFAULT_SETTINGS.index_format;
+					this.renderIndexBody(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addTextArea(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.index_format)
+				.setValue(this.plugin.settings.index_format)
+				.onChange(async (value) => {
+					this.plugin.settings.index_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
 	refresh() {
 		this.contentEl.empty()
 		this.render()
@@ -1687,23 +1946,13 @@ class ClearOldBibleFilesModal extends Modal {
 						this.close();
 						let notice = new Notice("Clearing bible folder...", 0)
 
-						let list = await this.app.vault.adapter.list(bible_path);
-						for (let path of list.files) {
-							let abstract = this.app.vault.getAbstractFileByPath(
-								path,
-							);
-							if (abstract != null) {
-								await this.app.vault.delete(abstract, true);
-							}
+						let abstract = this.app.vault.getAbstractFileByPath(
+							normalizePath(bible_path,)
+						);
+						if (abstract != null) {
+							await this.app.vault.delete(abstract, true);
 						}
-						for (let path of list.folders) {
-							let abstract = this.app.vault.getAbstractFileByPath(
-								path,
-							);
-							if (abstract != null) {
-								await this.app.vault.delete(abstract, true);
-							}
-						}
+						this.app.vault.adapter.mkdir(normalizePath(bible_path));
 
 						notice.hide()
 						await this.plugin._build_bible(bible_path);
