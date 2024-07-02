@@ -14,7 +14,8 @@ import {
 import { E_CANCELED, Mutex } from 'async-mutex';
 
 const BUILD_END_TOAST = "Bible build finished!";
-const SELECTED_TRANSLATION_OPTION = "<Selected display translation>"
+const SELECTED_TRANSLATION_OPTION = "<Selected reading translation, {0}>"
+const SELECTED_TRANSLATION_OPTION_KEY = "default"
 
 // Remember to rename these classes and interfaces!
 
@@ -26,6 +27,7 @@ class MyBibleSettings {
 	store_locally: boolean;
 
 	padded_order: boolean;
+	book_folders_enabled: boolean;
 	book_name_format: string;
 	book_name_delimiter: string;
 	book_name_capitalization: string;
@@ -43,67 +45,73 @@ class MyBibleSettings {
 	index_format: string
 	index_link_format: string
 
-	book_index_enabled: boolean
-	book_index_name_format: string
-	book_index_format: string
-	book_index_link_format: string
+	chapter_index_enabled: boolean
+	chapter_index_name_format: string
+	chapter_index_format: string
+	chapter_index_link_format: string
 
 	_built_translation: string;
 
 	async set_translation(val: string, plugin: MyBible) {
-		let has_translation = false;
-		let translations = (await plugin.bible_api.get_translations());
-		if (!(val in translations)) {
-			for (let translation in translations) {
-				this.translation = translation
-			}
-		} else {
-			this.translation = val;
-		}
+		throw "Unimplemented"
 	}
 }
 
 const DEFAULT_SETTINGS: MyBibleSettings = {
-	translation: SELECTED_TRANSLATION_OPTION,
+	translation: SELECTED_TRANSLATION_OPTION_KEY,
 	reading_translation: "WEB",
 	bible_folder: "/My Bible/",
+	book_folders_enabled: true,
 	book_name_format: "{order} {book}",
 	book_name_delimiter: " ",
-	chapter_name_format: "{order} {book} {chapter}",
+	chapter_name_format: "{book} {chapter}",
 	book_name_capitalization: "name_case",
 	book_name_abbreviated: false,
 	padded_order: true,
 	padded_chapter: false,
 	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
-		+ "{verse_text}",
+		+ "{verse_text}"
+	,
 	chapter_body_format: "\n"
-		+ "###### [[{first_chapter_name}|{book} 1]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} <<]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|>> {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|{book} {final_chapter}|]]\n"
+		+ "###### Navigation\n*[[{first_chapter_name}|First]] | [[{last_chapter_name}|Previous]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|Next]] | [[{final_chapter_name}|Final]]*\n"
 		+ "\n"
 		+ "{verses}\n"
 		+ "\n"
-		+ "###### [[{first_chapter_name}|{book} 1]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} <<]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|>> {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|{book} {final_chapter}|]]\n"
-		+ "\n",
+		+ "###### Navigation\n*[[{first_chapter_name}|First]] | [[{last_chapter_name}|Previous]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|Next]] | [[{final_chapter_name}|Final]]*\n"
+		+ "\n"
+	,
 	index_enabled: true,
-	index_name_format: "-- Books --",
-	index_format: "### Old testament\n"
+	index_name_format: "-- Bible --",
+	index_link_format: "- [[{book_index}|{book}]]",
+	index_format: ""
+		+ "### Old testament\n"
 		+ "{old_testament}\n"
 		+ "### New testament\n"
 		+ "{new_testament}\n"
 		+ "### Apocrypha\n"
-		+ "{apocrypha}",
-	book_index_enabled: true,
-	index_link_format: "- [[{book_index}|{book}]]",
-	book_index_name_format: "-- {book} --",
-	book_index_format: "[[{index}|{translation}]]\n"
+		+ "{apocrypha}"
+	,
+	chapter_index_enabled: true,
+	chapter_index_name_format: "-- {book} --",
+	chapter_index_link_format: "- [[{chapter_name}|{chapter}]]",
+	chapter_index_format: ""
+		+ "###### Navigation\n"
+		+ "*[[{index}|{book}]]*\n"
 		+ "\n"
-		+ "{chapters}\n",
-	book_index_link_format: "- [[{chapter_name}|{chapter}]]",
+		+ "### Chapters\n"
+		+ "{chapters}\n"
+	,
 	store_locally: false,
 
 	_built_translation: "",
 
 	set_translation: async function (val: string, plugin: MyBible): Promise<void> {
+		if (val === SELECTED_TRANSLATION_OPTION_KEY) {
+			this.translation = val
+			return
+		}
+
 		let has_translation = false;
 		let translations = (await plugin.bible_api.get_translations());
 		if (!(val in translations)) {
@@ -427,115 +435,122 @@ export default class MyBible extends Plugin {
 
 	async _build_bible(bible_path: string) {
 		this.show_toast_progress(0, null)
-
-		let translation = ""
-		if (this.settings.translation == SELECTED_TRANSLATION_OPTION) {
-			translation = this.settings.reading_translation
-		} else {
-			translation = this.settings.translation
-		}
-
-		// TODO: Build bibles according to translation in settings
-		this.settings._built_translation = this.settings.translation;
-		await this.saveSettings();
-
-		let ctx = new BuildContext;
-		ctx.plugin = this
-		ctx.translation = this.settings._built_translation;
-		ctx.books = await this.bible_api.get_books(
-			this.settings._built_translation
-			);
-		ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation);
-
-
-		// Notify progress
-		let built_chapter_count = 0
-		let total_chapter_count = 0
-		for (const i in ctx.books) {
-			total_chapter_count += ctx.books[i].chapters
-		}
-		this.show_toast_progress(0, total_chapter_count)
-
-		if (!this.settings.build_with_dynamic_verses) {
-			ctx.translation_texts = await this.bible_api
-				.get_translation(ctx.translation);
-		}
-
-		// Index
-		if (this.settings.index_enabled) {
-			await save_file(
-				"{0}/{1}.md".format(bible_path, ctx.format_index_name()),
-				ctx.format_index(),
-			)
-		}
-
-		let file_promises: Array<Promise<any>> = [];
-
-		for (let book of ctx.books) {
-			ctx.set_book(book.id);
-
-
-			// Book path
-			let book_path = bible_path;
-			if (this.settings.book_name_format.length != 0) {
-				book_path += "/" + ctx.format_book_name(this, ctx.book, this.settings.book_name_capitalization);
-				this.app.vault.adapter.mkdir(normalizePath(book_path));
+		try {
+			let translation = ""
+			if (this.settings.translation == SELECTED_TRANSLATION_OPTION_KEY) {
+				translation = this.settings.reading_translation
+			} else {
+				translation = this.settings.translation
 			}
-
-			// Book index
-			file_promises.push(save_file(
-				"{0}/{1}.md".format(book_path, ctx.format_book_index_name(ctx.book)),
-				ctx.format_book_index(ctx.book),
-			))
-
-			
-			for (const chapter_i of Array(ctx.book.chapters).keys()) {
-				ctx.set_chapter(chapter_i+1);
-
-				// Assemble verses
-				ctx.verses_text = "";
-				let verse = 1;
-				while (verse != ctx.get_verse_count()+1) {
-					ctx.verse = verse;
-					ctx.verses_text += ctx.format_verse_body(
-						this,
-						this.settings.build_with_dynamic_verses,
-					);
-					if (verse != ctx.get_verse_count()) {
-						ctx.verses_text += "\n";
-					}
-					verse += 1;
+	
+			// TODO: Build bibles according to translation in settings
+			this.settings._built_translation = translation;
+			await this.saveSettings();
+	
+			let ctx = new BuildContext;
+			ctx.plugin = this
+			ctx.translation = translation;
+			ctx.books = await this.bible_api.get_books(ctx.translation);
+			ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation);
+	
+	
+			// Notify progress
+			let built_chapter_count = 0
+			let total_chapter_count = 0
+			for (const i in ctx.books) {
+				total_chapter_count += ctx.books[i].chapters
+			}
+			this.show_toast_progress(0, total_chapter_count)
+	
+			if (!this.settings.build_with_dynamic_verses) {
+				ctx.translation_texts = await this.bible_api
+					.get_translation(ctx.translation);
+			}
+	
+			// Index
+			if (this.settings.index_enabled) {
+				await save_file(
+					"{0}/{1}.md".format(bible_path, ctx.format_index_name()),
+					ctx.format_index(),
+				)
+			}
+	
+			let file_promises: Array<Promise<any>> = [];
+	
+			for (let book of ctx.books) {
+				ctx.set_book(book.id);
+	
+	
+				// Book path
+				let book_path = bible_path;
+				if (this.settings.book_folders_enabled) {
+					book_path += "/" + ctx.format_book_name(this, ctx.book, this.settings.book_name_capitalization);
+					this.app.vault.adapter.mkdir(normalizePath(book_path));
 				}
-
-				// Chapter name
-				let chapter_note_name = ctx.format_chapter_name();
-
-				// Chapter body
-				let note_body = ctx.format_chapter_body(this);
-
-				// Save file
-				let file_path = book_path + "/" + chapter_note_name + ".md"
-
-				file_promises.push(new Promise(async () => {
-					await save_file(file_path, note_body)
-					built_chapter_count += 1
-					this.show_toast_progress(
-						built_chapter_count,
-						total_chapter_count,
-					)
-				}))
+	
+				// Chapter index
+				if (this.settings.chapter_index_enabled) {
+					file_promises.push(save_file(
+						"{0}/{1}.md".format(book_path, ctx.format_chapter_index_name(ctx.book)),
+						ctx.format_chapter_index(ctx.book),
+					))
+				}
+				
+				for (const chapter_i of Array(ctx.book.chapters).keys()) {
+					ctx.set_chapter(chapter_i+1);
+	
+					// Assemble verses
+					ctx.verses_text = "";
+					let verse = 1;
+					while (verse != ctx.get_verse_count()+1) {
+						ctx.verse = verse;
+						ctx.verses_text += ctx.format_verse_body(
+							this,
+							this.settings.build_with_dynamic_verses,
+						);
+						if (verse != ctx.get_verse_count()) {
+							ctx.verses_text += "\n";
+						}
+						verse += 1;
+					}
+	
+					// Chapter name
+					let chapter_note_name = ctx.format_chapter_name();
+	
+					// Chapter body
+					let note_body = ctx.format_chapter_body(this);
+	
+					// Save file
+					let file_path = book_path + "/" + chapter_note_name + ".md"
+	
+					file_promises.push(new Promise(async () => {
+						await save_file(file_path, note_body)
+						built_chapter_count += 1
+						this.show_toast_progress(
+							built_chapter_count,
+							total_chapter_count,
+						)
+					}))
+				}
 			}
+	
+			await Promise.all(file_promises);
+		} catch (e)  {
+			this.show_toast_error(String(e))
+			throw e
 		}
+	}
 
-		file_promises.push(new Promise(() => {
-			
-		}))
-
-		await Promise.all(file_promises);
+	show_toast_error(error:string) {
+		if (this.progress_notice !== null) {
+			this.progress_notice?.hide()
+			this.progress_notice = null
+		}
+		new Notice("Error building bible: " + error, 10000)
 	}
 
 	show_toast_progress(progress: number, finish: number|null) {
-		if (progress == finish && finish != null) {
+		if (progress === finish && finish != null) {
 			this.progress_notice?.hide()
 			this.progress_notice = null
 			new Notice(BUILD_END_TOAST)
@@ -621,7 +636,7 @@ class BuildContext {
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{book}/g, book_name)
-			.replace(/{translation}/g, String(plugin.settings.translation))
+			.replace(/{translation}/g, String(this.translation))
 	}
 
 	format_book_name_without_order(plugin:MyBible, book:BookData, casing:string): string {
@@ -647,7 +662,7 @@ class BuildContext {
 			)
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name())
-			.replace(/{chapter_index}/g, this.format_book_index_name(this.book))
+			.replace(/{chapter_index}/g, this.format_chapter_index_name(this.book))
 			.replace(/{last_chapter}/g, String(this.last_chapter))
 			.replace(/{last_chapter_name}/g, this.format_chapter_name("last"))
 			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(plugin, this.last_book, casing))
@@ -658,7 +673,7 @@ class BuildContext {
 			.replace(/{first_chapter_name}/g, this.format_chapter_name("first"))
 			.replace(/{final_chapter}/g, String(this.book.chapters))
 			.replace(/{final_chapter_name}/g, this.format_chapter_name("final"))
-			.replace(/{translation}/g, String(plugin.settings.translation))
+			.replace(/{translation}/g, String(this.translation))
 	}
 
 	format_chapter_name(tense:string="current", custom_chapter:number|null = null): string {
@@ -751,6 +766,17 @@ class BuildContext {
 				+ "```"
 		} else {
 			verse_text = this.translation_texts.books[this.book.id][this.chapter-1][this.verse-1]
+			if (verse_text.contains("<")) {
+				verse_text = verse_text
+					.replace(/<\s*br\s*\/?>/g, "\n") // Breakline tag
+					.replace(/<\/?\s*i*\s*\/?>/g, "*") // Italics tag
+					.replace(/<\/?\s*b*\s*\/?>/g, "**") // Bold tag
+					.replace(/<\s*S*\s*>/g, "<sup>*") // Strong open
+					.replace(/<\/\s*S*\s*>/g, "*</sup>") // Strong close
+					.replace(/<\/?\s*\w*\s*\/?>/g, "") // Any other tags
+				;
+			}
+
 		}
 
 		return plugin.settings.verse_body_format
@@ -766,10 +792,10 @@ class BuildContext {
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name())
 			.replace(/{final_chapter}/g, String(this.book.chapters))
-			.replace(/{translation}/g, String(plugin.settings.translation))
+			.replace(/{translation}/g, String(this.translation))
 	}
 
-	format_book_index(book: BookData): string {
+	format_chapter_index(book: BookData): string {
 		let book_name = this.format_book_name_without_order(
 			this.plugin,
 			book,
@@ -780,11 +806,11 @@ class BuildContext {
 
 		// Format chapter links
 		for (let i = 0; i != book.chapters; i++) {
-			let link = this.plugin.settings.book_index_link_format
+			let link = this.plugin.settings.chapter_index_link_format
 				.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 				.replace(/{book}/g, book_name)
-				.replace(/{book_index}/g, this.format_book_index_name(book))
-				.replace(/{translation}/g, String(this.plugin.settings.translation))
+				.replace(/{book_index}/g, this.format_chapter_index_name(book))
+				.replace(/{translation}/g, String(this.translation))
 				.replace(/{chapter}/g, String(i+1))
 				.replace(/{chapter_name}/g, this.format_chapter_name("custom", i+1))
 			;
@@ -794,26 +820,26 @@ class BuildContext {
 			chapter_links += link
 		}
 
-		return this.plugin.settings.book_index_format
+		return this.plugin.settings.chapter_index_format
 			.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{book}/g, book_name)
-			.replace(/{book_index}/g, this.format_book_index_name(book))
-			.replace(/{translation}/g, String(this.plugin.settings.translation))
+			.replace(/{book_index}/g, this.format_chapter_index_name(book))
+			.replace(/{translation}/g, String(this.translation))
 			.replace(/{index}/g, this.format_index_name())
 			.replace(/{chapters}/g, chapter_links)
 		;
 	}
 
-	format_book_index_name(book: BookData): string {
+	format_chapter_index_name(book: BookData): string {
 		let book_name = this.format_book_name_without_order(
 			this.plugin,
 			book,
 			this.plugin.settings.book_name_capitalization,
 		);
-		return this.plugin.settings.book_index_name_format
+		return this.plugin.settings.chapter_index_name_format
 			.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{book}/g, book_name)
-			.replace(/{translation}/g, String(this.plugin.settings.translation))
+			.replace(/{translation}/g, String(this.translation))
 	}
 	
 	format_index_name(): string {
@@ -837,13 +863,13 @@ class BuildContext {
 			let link = this.plugin.settings.index_link_format
 				.replace(/{order}/g, String(this.books[i].id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 				.replace(/{book}/g, book_name)
-				.replace(/{book_index}/g, this.format_book_index_name(this.books[i]))
-				.replace(/{translation}/g, String(this.plugin.settings.translation))
+				.replace(/{book_index}/g, this.format_chapter_index_name(this.books[i]))
+				.replace(/{translation}/g, String(this.translation))
 				+ '\n'
 
-			if (Number(i) < 40) {
+			if (this.books[i].id < 40) {
 				old_t_links += link 
-			} else if (Number(i) < 67) {
+			} else if (this.books[i].id < 67) {
 				new_t_links += link 
 			} else {
 				apocr_links += link 
@@ -1431,7 +1457,7 @@ class BuilderModal extends Modal {
 			.setName('Translation')
 			.setDesc('Builds your Bible according to the layout of this tranlsation. If "Build with dynamic verses" is active, then the text from this version will be built into your Bible.')
 			.addDropdown(async drop => {
-				drop.addOption(SELECTED_TRANSLATION_OPTION, SELECTED_TRANSLATION_OPTION)
+				drop.addOption(SELECTED_TRANSLATION_OPTION_KEY, SELECTED_TRANSLATION_OPTION.format(this.plugin.settings.reading_translation))
 
 				let translations = await this.plugin.bible_api.get_translations();
 				
@@ -1469,28 +1495,14 @@ class BuilderModal extends Modal {
 					);
 				}
 				drop.onChange(async value => {
-					this.plugin.settings.translation = value;
+					await this.plugin.settings.set_translation(value, this.plugin);
 					await this.plugin.saveSettings();
 				})
 				drop.setValue(this.plugin.settings.translation);
 			})
 		;
 
-		this.renderButton(new Setting(containerEl));
-		
-		// Books
-		
-		new Setting(containerEl).nameEl.createEl("h3", { text: "Books" })
-		
-		this.renderBookFormat(new Setting(containerEl));
-		
-		this.renderNameDelimeter(new Setting(containerEl));
-			
-		this.renderBookCapitalization(new Setting(containerEl));
-			
-		this.renderBookAbbreviation(new Setting(containerEl));
-
-		this.renderPaddedNums(new Setting(containerEl));
+		this.renderBuildButton(new Setting(containerEl));
 
 		// Chapters
 
@@ -1504,6 +1516,7 @@ class BuilderModal extends Modal {
 			.setName('Pad numbers')
 			.setDesc('When active, pads chapter numbers with extra zeros. For example, "Psalms 5" becomes "Psalms 005".')
 			.addToggle(toggle => toggle
+				.setTooltip("Toggle alignment padding of chapter numbers")
 				.setValue(this.plugin.settings.padded_chapter)
 				.onChange(async (value) => {
 					this.plugin.settings.padded_chapter = value;
@@ -1529,11 +1542,29 @@ class BuilderModal extends Modal {
 			.setName('Build with dynamic verses')
 			.setDesc('When active, your Bible will be built with verse references that can be quickly changed when you switch translations. When inactive, the text of the translation is built directly into your Bible.')
 			.addToggle(toggle => toggle
+				.setTooltip("Toggle generating with dynamic verses")
 				.setValue(this.plugin.settings.build_with_dynamic_verses)
 				.onChange(async (value) => {
 					this.plugin.settings.build_with_dynamic_verses = value;
 					await this.plugin.saveSettings();
 				}))
+
+		// Books
+		let books_header = new Setting(containerEl)
+		books_header.nameEl.createEl("h3", { text: "Books" })
+		books_header.addToggle(toggle => {toggle
+			.setTooltip("Toggle if books should generate folders")
+				.setValue(this.plugin.settings.book_folders_enabled)
+				.onChange(async value => {
+					this.plugin.settings.book_folders_enabled = value;
+					await this.plugin.saveSettings();
+				})
+		})
+		this.renderBookFormat(new Setting(containerEl));
+		this.renderNameDelimeter(new Setting(containerEl));
+		this.renderBookCapitalization(new Setting(containerEl));
+		this.renderBookAbbreviation(new Setting(containerEl));
+		this.renderPaddedOrderNums(new Setting(containerEl));
 
 		// Book index
 		let index_header  = new Setting(containerEl)
@@ -1542,13 +1573,10 @@ class BuilderModal extends Modal {
 		let index_body  = new Setting(containerEl)
 		index_header
 			.addToggle(toggle => {toggle
+				.setTooltip("Toggle book index generation")
 				.setValue(this.plugin.settings.index_enabled)
 				.onChange(async value => {
 					this.plugin.settings.index_enabled = value;
-					console.log(this.plugin.settings.index_enabled)
-					this.renderIndexName(index_name)
-					this.renderIndexBookLink(index_links)
-					this.renderIndexBody(index_body)
 					await this.plugin.saveSettings();
 				})
 			})
@@ -1560,14 +1588,28 @@ class BuilderModal extends Modal {
 		this.renderIndexBody(index_body)
 
 		// Chapter index
-		new Setting(containerEl).nameEl.createEl("h3", { text: "Chapter index" })
-		this.renderChapterIndexName(new Setting(containerEl))
-		this.renderChapterIndexLink(new Setting(containerEl))
-		this.renderChapterIndexBody(new Setting(containerEl))
+		let chapter_index_header  = new Setting(containerEl)
+		let chapter_index_name  = new Setting(containerEl)
+		let chapter_index_links  = new Setting(containerEl)
+		let chapter_index_body  = new Setting(containerEl)
+		chapter_index_header
+			.addToggle(toggle => {toggle
+				.setTooltip("Toggle chapter index generation")
+				.setValue(this.plugin.settings.chapter_index_enabled)
+				.onChange(async value => {
+					this.plugin.settings.chapter_index_enabled = value;
+					await this.plugin.saveSettings();
+				})
+			})
+			.nameEl.createEl("h3", { text: "Chapter indexs" })
+		;
+		this.renderChapterIndexName(chapter_index_name)
+		this.renderChapterIndexLink(chapter_index_links)
+		this.renderChapterIndexBody(chapter_index_body)
 
 		// After
 
-		this.renderButton(new Setting(containerEl));
+		this.renderBuildButton(new Setting(containerEl));
 	}
 
 	// Top renderers
@@ -1598,10 +1640,11 @@ class BuilderModal extends Modal {
 		;
 	}
 
-	renderButton(setting: Setting) {
+	renderBuildButton(setting: Setting) {
 		setting
 			.addButton(btn => btn
 				.setButtonText("Build")
+				.setTooltip("Build your bible")
 				.setCta()
 				.onClick(async _ => {
 					this.close()
@@ -1645,6 +1688,7 @@ class BuilderModal extends Modal {
 			.setName('Abbreviate names')
 			.setDesc('When active, The names of books will be abbreviated to three letters. For example, "Genesis" becomes "Gen" and "1 Kings" becomes "1Ki". (May cause issues in some translations.)')
 			.addToggle(toggle => toggle
+				.setTooltip("Toggle book name abbreviation")
 				.setValue(this.plugin.settings.book_name_abbreviated)
 				.onChange(async (value) => {
 					this.plugin.settings.book_name_abbreviated = value;
@@ -1688,7 +1732,7 @@ class BuilderModal extends Modal {
 				})
 			)
 			.addText(text => text
-				.setPlaceholder('Example: "' + DEFAULT_SETTINGS.book_name_format + '"')
+				.setPlaceholder('Example: "' + DEFAULT_SETTINGS.book_name_delimiter + '"')
 				.setValue(this.plugin.settings.book_name_delimiter)
 				.onChange(async (value) => {
 					this.plugin.settings.book_name_delimiter = value;
@@ -1698,12 +1742,13 @@ class BuilderModal extends Modal {
 		;
 	}
 
-	renderPaddedNums(setting: Setting) {
+	renderPaddedOrderNums(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Pad order numbers')
 			.setDesc('When Active, pads order numbers with extra zeros. For example, "1 Genesis" would become "01 Gensis" when active.')
 			.addToggle(toggle => toggle
+				.setTooltip("Toggle alignment padding of book order numbers")
 				.setValue(this.plugin.settings.padded_order)
 				.onChange(async (value) => {
 					this.plugin.settings.padded_order = value;
@@ -1794,7 +1839,6 @@ class BuilderModal extends Modal {
 				})
 			)
 		;
-		setting.setDisabled(!this.plugin.settings.index_enabled)
 	}
 
 	renderIndexBookLink(setting: Setting) {
@@ -1862,17 +1906,17 @@ class BuilderModal extends Modal {
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
-					this.plugin.settings.book_index_name_format
-						= DEFAULT_SETTINGS.book_index_name_format;
+					this.plugin.settings.chapter_index_name_format
+						= DEFAULT_SETTINGS.chapter_index_name_format;
 					this.renderChapterIndexName(setting);
 					await this.plugin.saveSettings();
 				})
 			)
 			.addText(text => text
-				.setPlaceholder(DEFAULT_SETTINGS.book_index_name_format)
-				.setValue(this.plugin.settings.book_index_name_format)
+				.setPlaceholder(DEFAULT_SETTINGS.chapter_index_name_format)
+				.setValue(this.plugin.settings.chapter_index_name_format)
 				.onChange(async (value) => {
-					this.plugin.settings.book_index_name_format = value;
+					this.plugin.settings.chapter_index_name_format = value;
 					await this.plugin.saveSettings();
 				})
 			)
@@ -1889,17 +1933,17 @@ class BuilderModal extends Modal {
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
-					this.plugin.settings.book_index_link_format
-						= DEFAULT_SETTINGS.book_index_link_format;
+					this.plugin.settings.chapter_index_link_format
+						= DEFAULT_SETTINGS.chapter_index_link_format;
 					this.renderChapterIndexLink(setting);
 					await this.plugin.saveSettings();
 				})
 			)
 			.addText(text => text
-				.setPlaceholder(DEFAULT_SETTINGS.book_index_link_format)
-				.setValue(this.plugin.settings.book_index_link_format)
+				.setPlaceholder(DEFAULT_SETTINGS.chapter_index_link_format)
+				.setValue(this.plugin.settings.chapter_index_link_format)
 				.onChange(async (value) => {
-					this.plugin.settings.book_index_link_format = value;
+					this.plugin.settings.chapter_index_link_format = value;
 					await this.plugin.saveSettings();
 				})
 			)
@@ -1916,17 +1960,17 @@ class BuilderModal extends Modal {
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
-					this.plugin.settings.book_index_format
-						= DEFAULT_SETTINGS.book_index_format;
+					this.plugin.settings.chapter_index_format
+						= DEFAULT_SETTINGS.chapter_index_format;
 					this.renderChapterIndexBody(setting);
 					await this.plugin.saveSettings();
 				})
 			)
 			.addTextArea(text => text
-				.setPlaceholder(DEFAULT_SETTINGS.book_index_format)
-				.setValue(this.plugin.settings.book_index_format)
+				.setPlaceholder(DEFAULT_SETTINGS.chapter_index_format)
+				.setValue(this.plugin.settings.chapter_index_format)
 				.onChange(async (value) => {
-					this.plugin.settings.book_index_format = value;
+					this.plugin.settings.chapter_index_format = value;
 					await this.plugin.saveSettings();
 				})
 			)
