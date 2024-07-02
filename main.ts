@@ -14,11 +14,13 @@ import {
 import { E_CANCELED, Mutex } from 'async-mutex';
 
 const BUILD_END_TOAST = "Bible build finished!";
+const SELECTED_TRANSLATION_OPTION = "<Selected display translation>"
 
 // Remember to rename these classes and interfaces!
 
 class MyBibleSettings {
 	translation: string;
+	reading_translation: string
 	bible_folder: string;
 
 	store_locally: boolean;
@@ -36,10 +38,12 @@ class MyBibleSettings {
 	build_with_dynamic_verses: boolean;
 	verse_body_format: string;
 
+	index_enabled: boolean
 	index_name_format: string
 	index_format: string
 	index_link_format: string
 
+	book_index_enabled: boolean
 	book_index_name_format: string
 	book_index_format: string
 	book_index_link_format: string
@@ -60,7 +64,8 @@ class MyBibleSettings {
 }
 
 const DEFAULT_SETTINGS: MyBibleSettings = {
-	translation: "",
+	translation: SELECTED_TRANSLATION_OPTION,
+	reading_translation: "WEB",
 	bible_folder: "/My Bible/",
 	book_name_format: "{order} {book}",
 	book_name_delimiter: " ",
@@ -73,21 +78,23 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	verse_body_format: "###### {verse}\n"
 		+ "{verse_text}",
 	chapter_body_format: "\n"
-		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
+		+ "###### [[{first_chapter_name}|{book} 1]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} <<]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|>> {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|{book} {final_chapter}|]]\n"
 		+ "\n"
 		+ "{verses}\n"
 		+ "\n"
-		+ "###### [[{first_chapter_name}|{book} 1 ⏮]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} ◀]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|▶ {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|⏭ {book} {final_chapter}|]]\n"
+		+ "###### [[{first_chapter_name}|{book} 1]] | [[{last_chapter_name}|{last_chapter_book} {last_chapter} <<]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|>> {next_chapter_book} {next_chapter}]] | [[{final_chapter_name}|{book} {final_chapter}|]]\n"
 		+ "\n",
-	index_name_format: "--- {translation} ---",
+	index_enabled: true,
+	index_name_format: "-- Books --",
 	index_format: "### Old testament\n"
 		+ "{old_testament}\n"
 		+ "### New testament\n"
 		+ "{new_testament}\n"
 		+ "### Apocrypha\n"
 		+ "{apocrypha}",
+	book_index_enabled: true,
 	index_link_format: "- [[{book_index}|{book}]]",
-	book_index_name_format: "--- {book} ---",
+	book_index_name_format: "-- {book} --",
 	book_index_format: "[[{index}|{translation}]]\n"
 		+ "\n"
 		+ "{chapters}\n",
@@ -268,7 +275,7 @@ export default class MyBible extends Plugin {
 				i += 1;
 			}
 
-			let translation = maybe_translation || this.settings.translation;
+			let translation = maybe_translation || this.settings.reading_translation;
 			if (book !== null) {
 				book_id = await this.bible_api
 					.book_id(this.settings._built_translation||translation, book);
@@ -421,6 +428,13 @@ export default class MyBible extends Plugin {
 	async _build_bible(bible_path: string) {
 		this.show_toast_progress(0, null)
 
+		let translation = ""
+		if (this.settings.translation == SELECTED_TRANSLATION_OPTION) {
+			translation = this.settings.reading_translation
+		} else {
+			translation = this.settings.translation
+		}
+
 		// TODO: Build bibles according to translation in settings
 		this.settings._built_translation = this.settings.translation;
 		await this.saveSettings();
@@ -448,10 +462,12 @@ export default class MyBible extends Plugin {
 		}
 
 		// Index
-		await save_file(
-			"{0}/{1}.md".format(bible_path, ctx.format_index_name()),
-			ctx.format_index(),
-		)
+		if (this.settings.index_enabled) {
+			await save_file(
+				"{0}/{1}.md".format(bible_path, ctx.format_index_name()),
+				ctx.format_index(),
+			)
+		}
 
 		let file_promises: Array<Promise<any>> = [];
 
@@ -1405,7 +1421,7 @@ class BuilderModal extends Modal {
 	render() {
 		let containerEl = this.contentEl;
 
-		containerEl.createEl("h1", {text: "Bible builder"})
+		new Setting(containerEl).nameEl.createEl("h1", { text: "Book builder" })
 
 		// Top settings
 
@@ -1413,8 +1429,10 @@ class BuilderModal extends Modal {
 
 		new Setting(containerEl)
 			.setName('Translation')
-			.setDesc('The version of the Bible to display.')
+			.setDesc('Builds your Bible according to the layout of this tranlsation. If "Build with dynamic verses" is active, then the text from this version will be built into your Bible.')
 			.addDropdown(async drop => {
+				drop.addOption(SELECTED_TRANSLATION_OPTION, SELECTED_TRANSLATION_OPTION)
+
 				let translations = await this.plugin.bible_api.get_translations();
 				
 				let translations_list = [];
@@ -1443,7 +1461,7 @@ class BuilderModal extends Modal {
 					let key = translations_list[i];
 					drop.addOption(
 						key,
-						"{1} - {2} - {0}".format(
+						"{0} - {1} - {2}".format(
 							translations[key].language,
 							key,
 							translations[key].display_name,
@@ -1462,7 +1480,7 @@ class BuilderModal extends Modal {
 		
 		// Books
 		
-		containerEl.createEl("h3", { text: "Books" });
+		new Setting(containerEl).nameEl.createEl("h3", { text: "Books" })
 		
 		this.renderBookFormat(new Setting(containerEl));
 		
@@ -1476,7 +1494,7 @@ class BuilderModal extends Modal {
 
 		// Chapters
 
-		containerEl.createEl("h3", { text: "Chapters" });
+		new Setting(containerEl).nameEl.createEl("h3", { text: "Chapters" })
 		
 		this.renderChapterName(new Setting(containerEl));
 
@@ -1484,7 +1502,7 @@ class BuilderModal extends Modal {
 					
 		new Setting(containerEl)
 			.setName('Pad numbers')
-			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
+			.setDesc('When active, pads chapter numbers with extra zeros. For example, "Psalms 5" becomes "Psalms 005".')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.padded_chapter)
 				.onChange(async (value) => {
@@ -1494,7 +1512,7 @@ class BuilderModal extends Modal {
 
 		// Verses
 
-		containerEl.createEl("h3", { text: "Verses" });
+		new Setting(containerEl).nameEl.createEl("h3", { text: "Verses" })
 
 		new Setting(containerEl)
 			.setName('Format')
@@ -1509,7 +1527,7 @@ class BuilderModal extends Modal {
 
 		new Setting(containerEl)
 			.setName('Build with dynamic verses')
-			.setDesc('When ON, the text of verses will be saved as verse references that are loaded as you read it. When OFF, saves the text for your current translation into the built files.')
+			.setDesc('When active, your Bible will be built with verse references that can be quickly changed when you switch translations. When inactive, the text of the translation is built directly into your Bible.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.build_with_dynamic_verses)
 				.onChange(async (value) => {
@@ -1517,11 +1535,35 @@ class BuilderModal extends Modal {
 					await this.plugin.saveSettings();
 				}))
 
-		// Index
-		containerEl.createEl("h3", { text: "Index" });
-		this.renderIndexName(new Setting(containerEl))
-		this.renderIndexBookLink(new Setting(containerEl))
-		this.renderIndexBody(new Setting(containerEl))
+		// Book index
+		let index_header  = new Setting(containerEl)
+		let index_name  = new Setting(containerEl)
+		let index_links  = new Setting(containerEl)
+		let index_body  = new Setting(containerEl)
+		index_header
+			.addToggle(toggle => {toggle
+				.setValue(this.plugin.settings.index_enabled)
+				.onChange(async value => {
+					this.plugin.settings.index_enabled = value;
+					console.log(this.plugin.settings.index_enabled)
+					this.renderIndexName(index_name)
+					this.renderIndexBookLink(index_links)
+					this.renderIndexBody(index_body)
+					await this.plugin.saveSettings();
+				})
+			})
+			.nameEl.createEl("h3", { text: "Book index" })
+		;
+
+		this.renderIndexName(index_name)
+		this.renderIndexBookLink(index_links)
+		this.renderIndexBody(index_body)
+
+		// Chapter index
+		new Setting(containerEl).nameEl.createEl("h3", { text: "Chapter index" })
+		this.renderChapterIndexName(new Setting(containerEl))
+		this.renderChapterIndexLink(new Setting(containerEl))
+		this.renderChapterIndexBody(new Setting(containerEl))
 
 		// After
 
@@ -1534,7 +1576,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Folder')
-			.setDesc('A path to the folder where all the files for the bible will be placed. If the path does not exist it will be created.')
+			.setDesc('The path to the folder where your Bible will be placed. The folder should be empty for your Bible. If the path does not exist it will be created.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -1575,7 +1617,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Name format')
-			.setDesc('Formatting for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
+			.setDesc('The format for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -1601,7 +1643,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Abbreviate names')
-			.setDesc('Abbreviates the names of books to three letters so that, for example, "Genesis" becomes "Gen" and "1 Kings" becomes "1Ki". (May cause issues in some translations.)')
+			.setDesc('When active, The names of books will be abbreviated to three letters. For example, "Genesis" becomes "Gen" and "1 Kings" becomes "1Ki". (May cause issues in some translations.)')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.book_name_abbreviated)
 				.onChange(async (value) => {
@@ -1616,7 +1658,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Name capitalization')
-			.setDesc('Capitalization for the names of each book.')
+			.setDesc('Dictates the capitalization of book names.')
 			.addDropdown(drop => drop
 				.addOption("lower_case", "Lower case")
 				.addOption("name_case", "Name case")
@@ -1660,7 +1702,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Pad order numbers')
-			.setDesc('When ON, changes "{order}" in the names of book folders to be padded with extra zeros. For example, "1 Genesis" would become "01 Gensis" when turned ON.')
+			.setDesc('When Active, pads order numbers with extra zeros. For example, "1 Genesis" would become "01 Gensis" when active.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.padded_order)
 				.onChange(async (value) => {
@@ -1677,7 +1719,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Body format')
-			.setDesc('Formats the contents of chapters.')
+			.setDesc('The format for the contents of chapters.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -1704,7 +1746,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Name format')
-			.setDesc('Formats the names of chapter. For example, "{book} {chapter}" would become "Psalms 23.md".')
+			.setDesc('The format for the names of chapters. For example, "{book} {chapter}" would become "Psalms 23".')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -1726,18 +1768,18 @@ class BuilderModal extends Modal {
 		;
 	}
 
-	// Index
+	// Book index
 
 	renderIndexName(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Name format')
-			.setDesc('Formats the name of the book index.')
+			.setDesc('The format for the name of the book index.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
-					this.plugin.settings.index_link_format
+					this.plugin.settings.index_name_format
 						= DEFAULT_SETTINGS.index_name_format;
 					this.renderIndexName(setting);
 					await this.plugin.saveSettings();
@@ -1752,13 +1794,14 @@ class BuilderModal extends Modal {
 				})
 			)
 		;
+		setting.setDisabled(!this.plugin.settings.index_enabled)
 	}
 
 	renderIndexBookLink(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Book element format')
-			.setDesc('Formats the appearance of each book listed in  book index.')
+			.setDesc('The format for each book element in a list.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -1778,13 +1821,14 @@ class BuilderModal extends Modal {
 				})
 			)
 		;
+		setting.setDisabled(!this.plugin.settings.index_enabled)
 	}
 
 	renderIndexBody(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Body format')
-			.setDesc('Formats the body of the book index.')
+			.setDesc('The format for the content of the book index.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -1804,6 +1848,90 @@ class BuilderModal extends Modal {
 				})
 			)
 		;
+		setting.setDisabled(!this.plugin.settings.index_enabled)
+	}
+
+	// Chapter index
+
+	renderChapterIndexName(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Name format')
+			.setDesc('The format for the name of the chapter index.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.book_index_name_format
+						= DEFAULT_SETTINGS.book_index_name_format;
+					this.renderChapterIndexName(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.book_index_name_format)
+				.setValue(this.plugin.settings.book_index_name_format)
+				.onChange(async (value) => {
+					this.plugin.settings.book_index_name_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+		setting.setDisabled(!this.plugin.settings.index_enabled)
+	}
+
+	renderChapterIndexLink(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Chapter element format')
+			.setDesc('The format for each chapter element in a list.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.book_index_link_format
+						= DEFAULT_SETTINGS.book_index_link_format;
+					this.renderChapterIndexLink(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addText(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.book_index_link_format)
+				.setValue(this.plugin.settings.book_index_link_format)
+				.onChange(async (value) => {
+					this.plugin.settings.book_index_link_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+		setting.setDisabled(!this.plugin.settings.index_enabled)
+	}
+
+	renderChapterIndexBody(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Chapter format')
+			.setDesc('The format for the content of the chapter index.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.book_index_format
+						= DEFAULT_SETTINGS.book_index_format;
+					this.renderChapterIndexBody(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addTextArea(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.book_index_format)
+				.setValue(this.plugin.settings.book_index_format)
+				.onChange(async (value) => {
+					this.plugin.settings.book_index_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+		setting.setDisabled(!this.plugin.settings.index_enabled)
 	}
 
 	refresh() {
@@ -2054,10 +2182,34 @@ class SettingsTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Translation')
-			.setDesc('The version of the Bible to display.')
+			.setDesc('The version of the Bible that will be displayed in dynamic verses.')
 			.addDropdown(async drop => {
 				let translations = await this.plugin.bible_api.get_translations();
+				
+				let translations_list = [];
 				for (const key in translations) {
+					translations_list.push(key);
+				}
+				translations_list = translations_list.sort((a, b) => {
+					if (translations[a].language < translations[b].language) {
+						return -1;
+					}
+					if (translations[a].language > translations[b].language) {
+						return 1;
+					}
+
+					if (a < b) {
+						return -1;
+					}
+					if (a > b) {
+						return 1;
+					}
+
+					return 0;
+				})
+
+				for (const i in translations_list) {
+					let key = translations_list[i];
 					drop.addOption(
 						key,
 						"{0} - {1} - {2}".format(
@@ -2068,107 +2220,12 @@ class SettingsTab extends PluginSettingTab {
 					);
 				}
 				drop.onChange(async value => {
-					this.plugin.settings.translation = value;
+					this.plugin.settings.reading_translation = value;
 					await this.plugin.saveSettings();
 				})
-				drop.setValue(this.plugin.settings.translation);
-			});
-
-		new Setting(containerEl)
-			.setName('Bible folder')
-			.setDesc('A path to the folder where all the files for the bible will be placed. If the path does not exist it will be created.')
-			.addText(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.bible_folder)
-				.setValue(this.plugin.settings.bible_folder)
-				.onChange(async (value) => {
-					this.plugin.settings.bible_folder = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setHeading()
-			.setName("Book Formatting")
-
-		
-
-		new Setting(containerEl)
-			.setHeading()
-			.setName("Chapter Formatting")
-
-		
-
-		new Setting(containerEl)
-			.setName('Padded chapter numbers')
-			.setDesc('When ON, changes "{chapter}" (and related) in the names of chapters to be padded with extra zeros. For example, "Psalms 5" would become "Psalms 005" when turned ON.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.padded_chapter)
-				.onChange(async (value) => {
-					this.plugin.settings.padded_chapter = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setName('Chapter name format')
-			.setDesc('Formatting for the names of the notes of each chapter of a book. For example, "{book} {chapter}" would become "Psalms 23.md".')
-			.addText(text => text
-				.setPlaceholder(this.plugin.settings.chapter_name_format)
-				.setValue(this.plugin.settings.chapter_name_format)
-				.onChange(async (value) => {
-					this.plugin.settings.chapter_name_format = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setName('Chapter body format')
-			.setDesc('Formatting for the body of chapter notes.')
-			.addTextArea(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.chapter_body_format)
-				.setValue(this.plugin.settings.chapter_body_format)
-				.onChange(async (value) => {
-					this.plugin.settings.chapter_body_format = value;
-					await this.plugin.saveSettings();
-				}))
-		
-		new Setting(containerEl)
-			.setHeading()
-			.setName("Verse Formatting")
-			
-		new Setting(containerEl)
-			.setName('Build with dynamic verses')
-			.setDesc('When ON, the text of verses will be saved as verse references that are loaded as you read it. When OFF, saves the text for your current translation into the built files.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.build_with_dynamic_verses)
-				.onChange(async (value) => {
-					this.plugin.settings.build_with_dynamic_verses = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setName('Verse body format')
-			.setDesc('Formatting for the body of verses in chapters.')
-			.addTextArea(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.verse_body_format)
-				.setValue(this.plugin.settings.verse_body_format)
-				.onChange(async (value) => {
-					this.plugin.settings.verse_body_format = value;
-					await this.plugin.saveSettings();
-				}))
-
-		new Setting(containerEl)
-			.setHeading()
-			.setName("Data")
-
-		new Setting(containerEl)
-			.setName('Save bible locally')
-			.setDesc('When ON, caches viewed chapters on the local file system, so that they can be accessed without an internet connection.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.store_locally)
-				.onChange(async (value) => {
-					this.plugin.settings.store_locally = value;
-					await this.plugin.saveSettings();
-				}))
-
+				drop.setValue(this.plugin.settings.reading_translation);
+			})
+		;
 	}
 }
 
