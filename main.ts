@@ -310,7 +310,7 @@ export default class MyBible extends Plugin {
 					}
 				}
 				if (text.length === 0) {
-					text = "[Could not find text for the book '{1}', translation '{2}', chapter {0}]"
+					text = "<No text found for {1} {0} in translation {2}>"
 						.format(String(chapter), book, translation)
 				}
 			} else if (verse_end < verse) {
@@ -322,7 +322,7 @@ export default class MyBible extends Plugin {
 					verse,
 				);
 				if (text.length === 0) {
-					text = "[Could not find text for the book '{1}', translation '{3}', chapter {0}, verse {2}]"
+					text = "<No text found for {1} {0}:{2} in translation {3}>"
 						.format(String(chapter), book, String(verse), translation)
 				}
 			} else {
@@ -341,7 +341,7 @@ export default class MyBible extends Plugin {
 					j += 1;
 				}
 				if (text.length === 0) {
-					text = "[Could not find text for the book '{1}', translation '{4}', chapter {0}, verses {2}-{3}]"
+					text = "<No text found for {1} {0}:{2}-{3} in translation {4}>"
 						.format(String(chapter), book, String(verse), String(verse_end), translation)
 				}
 			}
@@ -995,30 +995,28 @@ class BibleAPI {
 		};
 
 		// Save chapter to local file sytem
-		if (save_locally) {
-			let cache_path = this.get_cache_path();
-			this.plugin.app.vault.adapter.mkdir(cache_path);
-			let cached_file_name = "{0} {1} {2}.txt"
-				.format(translation, String(book_id), String(chapter));
-			let cached_file_path = normalizePath(
-				cache_path + "/" + cached_file_name,
-			);
-			if (
-				chapter_data != null
-				&& !await this.plugin.app.vault.adapter.exists(cached_file_path)
-			) {
-				let body = "";
-				for (let i of chapter_data.keys()) {
-					body += chapter_data[i];
-					if (i !== chapter_data.length-1) {
-						body += "\n"
-					}
+		let cache_path = this.get_cache_path();
+		this.plugin.app.vault.adapter.mkdir(cache_path);
+		let cached_file_name = "{0} {1} {2}.txt"
+			.format(translation, String(book_id), String(chapter));
+		let cached_file_path = normalizePath(
+			cache_path + "/" + cached_file_name,
+		);
+		if (
+			chapter_data != null
+			&& !await this.plugin.app.vault.adapter.exists(cached_file_path)
+		) {
+			let body = "";
+			for (let i of chapter_data.keys()) {
+				body += chapter_data[i];
+				if (i !== chapter_data.length-1) {
+					body += "\n"
 				}
-				await this.plugin.app.vault.adapter.write(
-					cached_file_path,
-					body,
-				);
 			}
+			await this.plugin.app.vault.adapter.write(
+				cached_file_path,
+				body,
+			);
 		}
 
 		// Start/refresh cache clear timer
@@ -1144,26 +1142,24 @@ class BibleAPI {
 			await cached.mutex
 				.acquire()
 				.then(async () => {
-					if (this.plugin.settings.store_locally) {
-						// Attempt to load chapter locally
-						let cached_file_name = "{0} {1} {2}.txt"
-							.format(translation, String(book_id), String(chapter));
-						let cache_path = this.get_cache_path();
-						this.plugin.app.vault.adapter.mkdir(cache_path);
-						let cached_file_path = normalizePath(
-							cache_path + "/" + cached_file_name
-						);
-						if (
-							await this.plugin.app.vault.adapter
-								.exists(cached_file_path)
-						) {
-							let raw = await this.plugin.app.vault.adapter
-								.read(cached_file_path);
-							if (raw.startsWith("[")) {
-								cached.chapter_data = JSON.parse(raw);
-							} else {
-								cached.chapter_data = raw.split("\n");
-							}
+					// Attempt to load chapter locally
+					let cached_file_name = "{0} {1} {2}.txt"
+						.format(translation, String(book_id), String(chapter));
+					let cache_path = this.get_cache_path();
+					this.plugin.app.vault.adapter.mkdir(cache_path);
+					let cached_file_path = normalizePath(
+						cache_path + "/" + cached_file_name
+					);
+					if (
+						await this.plugin.app.vault.adapter
+							.exists(cached_file_path)
+					) {
+						let raw = await this.plugin.app.vault.adapter
+							.read(cached_file_path);
+						if (raw.startsWith("[")) {
+							cached.chapter_data = JSON.parse(raw);
+						} else {
+							cached.chapter_data = raw.split("\n");
 						}
 					}
 
@@ -1301,12 +1297,21 @@ class BollsLifeBibleAPI extends BibleAPI {
 	): Promise<ChapterData> {
 		// Fetch chapter from the web
 		try {
-			let chapter_data = JSON.parse(await httpGet(
+			let verse_data_list = JSON.parse(await httpGet(
 				"https://bolls.life/get-chapter/{0}/{1}/{2}/"
 					.format(translation, String(book_id), String(chapter))
-			)).map((x: VerseData) => x.text);
+			));
 
-			return chapter_data;
+			let texts = []
+			for (const data of verse_data_list) {
+				let verse = data["verse"]
+				while (texts.length < verse) {
+					texts.push("")
+				}
+				texts[verse-1] = data["text"]
+			}
+
+			return texts
 		} catch (e) {
 			if (e instanceof Error && e.message.startsWith("No book exists by name")) {
 				return [];
@@ -1338,19 +1343,24 @@ class BollsLifeBibleAPI extends BibleAPI {
 			let i = 0;
 			let curr_book_id = -1;
 			let curr_chapter = -1;
-			while (i != verses.length) {
-				let verse_json = verses[i];
-				if (curr_book_id != verse_json["book"]) {
-					curr_book_id = verse_json["book"]
+			for (const data of verses) {
+				let verse = data["verse"]
+
+				if (curr_book_id != data["book"]) {
+					curr_book_id = data["book"]
 					bible.books[curr_book_id] = [];
 					curr_chapter = -1
 				}
-				if (curr_chapter != verse_json["chapter"]) {
-					curr_chapter = verse_json["chapter"];
+				if (curr_chapter != data["chapter"]) {
+					curr_chapter = data["chapter"];
 					let book_data = bible.books[curr_book_id];
 					book_data.push([]);
 				}
-				bible.books[curr_book_id][curr_chapter - 1].push(verse_json["text"]);
+				while (bible.books[curr_book_id][curr_chapter-1].length < verse) {
+					bible.books[curr_book_id][curr_chapter-1].push("")
+				}
+
+				bible.books[curr_book_id][curr_chapter-1][verse-1] = data["text"]
 				i += 1;
 			}
 			ok(null);
