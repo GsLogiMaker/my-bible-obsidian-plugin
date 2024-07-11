@@ -5,6 +5,7 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	FuzzySuggestModal,
 	TFile,
 	TFolder,
 	normalizePath,
@@ -184,6 +185,12 @@ async function save_file(path: string, content: string) {
 	}
 }
 
+function translation_to_display_name(translation:Translation):string {
+	return "{0} - {1} - {2}"
+		.format(translation.language, translation.abbreviated_name, translation.display_name)
+	;
+}
+
 
 export default class MyBible extends Plugin {
 	bible_api: BibleAPI
@@ -204,6 +211,19 @@ export default class MyBible extends Plugin {
 			name: 'Open bible builder',
 			callback: async () => {
 				new BuilderModal(this.app, this).open()
+			}
+		});
+
+		this.addCommand({
+			id: 'quick_change_translation',
+			name: 'Quick change translation',
+			callback: async () => {
+				let modal = new QuickChangeTranslationeModal(this)
+				modal.translations = await this.bible_api.get_translations()
+				modal.onChose = translation => {
+					this.settings.reading_translation = translation.abbreviated_name
+				}
+				modal.open()
 			}
 		});
 
@@ -1353,7 +1373,6 @@ interface Translation {
 	language: string,
 }
 
-
 class BollsLifeBibleAPI extends BibleAPI {
 	plugin: MyBible;
 	chapter_cache: Record<ChapterKey, ChapterCache> = {};
@@ -1605,11 +1624,7 @@ class BuilderModal extends Modal {
 					let key = translations_list[i];
 					drop.addOption(
 						key,
-						"{0} - {1} - {2}".format(
-							translations[key].language,
-							key,
-							translations[key].display_name,
-						)
+						translation_to_display_name(translations[key]),
 					);
 				}
 				drop.onChange(async value => {
@@ -2326,6 +2341,34 @@ class DownloadBibleModal extends Modal {
 			'Completed download of the {0} translation!'
 				.format(translation)
 		);
+	}
+}
+  
+export class QuickChangeTranslationeModal extends FuzzySuggestModal<Translation> {
+	plugin: MyBible
+	translations: Translations
+	onChose: (chosen:Translation) => void | null
+
+	constructor(plugin: MyBible) {
+		super(plugin.app);
+		this.plugin = plugin;
+	}
+
+	// Returns all available suggestions.
+	getItems(): Translation[] {
+		let translations_list = Object.keys(this.translations).map(k => this.translations[k])
+		return translations_list
+	}
+
+	getItemText(item:Translation):string {
+		return translation_to_display_name(item)
+	}
+
+	// Perform action on the selected suggestion.
+	onChooseItem(item: Translation, evt: MouseEvent | KeyboardEvent) {
+		if (this.onChose !== null) {
+			this.onChose(item)
+		}
 	}
 }
 
