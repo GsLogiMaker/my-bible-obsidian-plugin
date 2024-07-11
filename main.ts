@@ -219,11 +219,7 @@ export default class MyBible extends Plugin {
 			id: 'download_bible',
 			name: 'Download translation',
 			callback: async () => {
-				// TODO: Open a dialogue to confirm downloading an entire bible
-				new DownloadBibleModal(
-					this.app,
-					this,
-				).open();
+				await this.bible_api.user_download_translation(this.settings.reading_translation)
 			}
 		});
 
@@ -1006,16 +1002,9 @@ class BibleAPI {
 			chapter_data != null
 			&& !await this.plugin.app.vault.adapter.exists(cached_file_path)
 		) {
-			let body = "";
-			for (let i of chapter_data.keys()) {
-				body += chapter_data[i];
-				if (i !== chapter_data.length-1) {
-					body += "\n"
-				}
-			}
 			await this.plugin.app.vault.adapter.write(
 				cached_file_path,
-				body,
+				this.make_chapter_file(chapter_data),
 			);
 		}
 
@@ -1065,9 +1054,37 @@ class BibleAPI {
 	}
 
 
+	/// Downloads a translation and saves it locally.
+	async user_download_translation(translation:string) {
+		let notify = new Notice("Downloading {0} translation".format(translation))
+
+		let promises = []
+		let translation_data = await this.get_translation(translation)
+		for (const book_id_ in translation_data.books) {
+			const book_id = Number(book_id_)
+			const chapters = translation_data.books[book_id]
+			for (let chapter_i = 0; chapter_i != chapters.length; chapter_i++) {
+				const chapter_data = chapters[chapter_i]
+				promises.push(this.save_chapter_data(
+					chapter_data,
+					translation,
+					book_id,
+					chapter_i+1,
+				))
+			}
+		}
+
+		await Promise.all(promises)
+
+		notify.hide()
+		new Notice("Download complete")
+	}
+
+
 	async get_translation(translation: string): Promise<TranslationData> {
 		throw new Error("unimplemented")
 	}
+
 
 	async get_book(translation: string, book_id:BookId): Promise<BookData> {
 		let book_key = "{0} {1}".format(translation, String(book_id));
@@ -1119,6 +1136,10 @@ class BibleAPI {
 		return normalizePath(this.plugin.manifest.dir + "/.mybiblecache");
 	}
 
+	get_download_path(): string {
+		return normalizePath(this.plugin.manifest.dir + "/.chapters");
+	}
+
 	async get_chapter_cached(
 		translation: string,
 		book_id: number,
@@ -1138,29 +1159,41 @@ class BibleAPI {
 
 		let cached = this.chapter_cache[chapter_key];
 
+		let file_name = this.make_chapter_file_name(translation, book_id, chapter)
+
+		let download_path = this.get_download_path()
+		this.plugin.app.vault.adapter.mkdir(download_path)
+		let download_file_path = normalizePath(
+			download_path + "/" + file_name
+		)
+
+		let cache_path = this.get_cache_path()
+		this.plugin.app.vault.adapter.mkdir(cache_path)
+		let cached_file_path = normalizePath(
+			cache_path + "/" + file_name
+		)
+
 		if (cached.chapter_data === null) {
 			await cached.mutex
 				.acquire()
 				.then(async () => {
 					// Attempt to load chapter locally
-					let cached_file_name = "{0} {1} {2}.txt"
-						.format(translation, String(book_id), String(chapter));
-					let cache_path = this.get_cache_path();
-					this.plugin.app.vault.adapter.mkdir(cache_path);
-					let cached_file_path = normalizePath(
-						cache_path + "/" + cached_file_name
-					);
 					if (
+						await this.plugin.app.vault.adapter
+							.exists(download_file_path)
+					) {
+						// Load from download
+						cached.chapter_data =  await this
+							.load_chapter_file(download_path, file_name)
+						;
+					} else if (
 						await this.plugin.app.vault.adapter
 							.exists(cached_file_path)
 					) {
-						let raw = await this.plugin.app.vault.adapter
-							.read(cached_file_path);
-						if (raw.startsWith("[")) {
-							cached.chapter_data = JSON.parse(raw);
-						} else {
-							cached.chapter_data = raw.split("\n");
-						}
+						// Load from cache
+						cached.chapter_data =  await this
+							.load_chapter_file(cache_path, file_name)
+						;
 					}
 
 					if (cached.chapter_data === null) {
@@ -1177,7 +1210,7 @@ class BibleAPI {
 				})
 				.catch(err => {
 					if (err === E_CANCELED) {
-
+						/*pass*/
 					} else {
 						throw new Error(err)
 					}
@@ -1185,16 +1218,28 @@ class BibleAPI {
 		}
 
 		if (cached.chapter_data === null || cached.chapter_data.length == 0) {
+			// Failed to load or download chapter
 			return [];
 		}
 
-		await this.cache_chapter(
-			translation,
-			book_id,
-			chapter,
-			cached.chapter_data,
-			this.plugin.settings.store_locally,
-		);
+		new Promise(async (ok, err) => {
+			// Cache chapter if not downloaded
+			if (
+				!await this.plugin.app.vault.adapter
+					.exists(download_file_path)
+			) {
+				this.cache_chapter(
+					translation,
+					book_id,
+					chapter,
+					cached.chapter_data,
+					this.plugin.settings.store_locally,
+				);
+			}
+			ok(null)
+		})
+
+		delete this.chapter_cache[chapter_key]
 
 		return cached.chapter_data;
 	}
@@ -1230,8 +1275,71 @@ class BibleAPI {
 	}
 
 
+	async load_chapter_file(folder:string, path: string): Promise<ChapterData> {
+		this.plugin.app.vault.adapter.mkdir(folder)
+		let raw = await this.plugin.app.vault.adapter
+			.read(folder + "/" + path)
+		if (raw.startsWith("[")) {
+			return JSON.parse(raw)
+		}
+		return raw.split("\n")
+	}
+
+
+	make_chapter_file(chapter_data:ChapterData): string {
+		let body = "";
+		for (let i of chapter_data.keys()) {
+			body += chapter_data[i];
+			if (i !== chapter_data.length-1) {
+				body += "\n"
+			}
+		}
+		
+		return body
+	}
+
+
+	/// Makes the file name for downloaded chapters
+	make_chapter_file_name(translation: string, book_id: number, chapter: Number): string {
+		return "{0} {1} {2}.txt".format(translation, String(book_id), String(chapter));
+		
+	}
+
+
 	make_chapter_key(translation: string, book_id: number, chapter: Number) {
 		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
+	}
+
+	/// Saves chapter data to local disk
+	async save_chapter_data(
+		chapter_data:ChapterData,
+		translation:string,
+		book_id:number,
+		chapter:number,
+	) {
+		// Save chapter to local file sytem
+		let path = this.get_download_path();
+		this.plugin.app.vault.adapter.mkdir(path);
+		let file_name = this
+			.make_chapter_file_name(translation, book_id, chapter);
+		let file_path = normalizePath(
+			path + "/" + file_name,
+		);
+		if (
+			!await this.plugin.app.vault.adapter.exists(file_path)
+		) {
+			let body = "";
+			for (const i of chapter_data.keys()) {
+				body += chapter_data[i];
+				if (i !== chapter_data.length-1) {
+					body += "\n"
+				}
+			}
+			await this.plugin.app.vault.adapter.write(
+				file_path,
+				body,
+			);
+		}
 	}
 }
 
