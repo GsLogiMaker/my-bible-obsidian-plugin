@@ -524,18 +524,19 @@ export default class MyBible extends Plugin {
 					ctx.set_chapter(chapter_i+1);
 	
 					// Assemble verses
-					ctx.verses_text = "";
-					let verse = 1;
-					while (verse != ctx.get_verse_count()+1) {
+					ctx.verses_text = ""
+					const verse_count = ctx.get_verse_count()
+					let verse = 1
+					while (verse !== verse_count+1) {
 						ctx.verse = verse;
 						ctx.verses_text += ctx.format_verse_body(
 							this,
 							this.settings.build_with_dynamic_verses,
-						);
-						if (verse != ctx.get_verse_count()) {
+						)
+						if (verse != verse_count) {
 							ctx.verses_text += "\n";
 						}
-						verse += 1;
+						verse += 1
 					}
 	
 					// Chapter name
@@ -560,6 +561,7 @@ export default class MyBible extends Plugin {
 	
 			await Promise.all(file_promises);
 		} catch (e)  {
+			console.log("Show err")
 			this.show_toast_error(String(e))
 			throw e
 		}
@@ -570,7 +572,7 @@ export default class MyBible extends Plugin {
 			this.progress_notice?.hide()
 			this.progress_notice = null
 		}
-		new Notice("Error building bible: " + error, 10000)
+		new Notice("Error building bible: " + error, 0)
 	}
 
 	show_toast_progress(progress: number, finish: number|null) {
@@ -955,7 +957,7 @@ class VerseCounts {
 	books: Record<BookId, Record<number, number>>
 
 	get_count_for(book:BookId, chapter:number): number {
-		return this.books[book][chapter]
+		return this.books[book][chapter] || 0
 	}
 }
 
@@ -1675,16 +1677,7 @@ class BuilderModal extends Modal {
 
 		new Setting(containerEl).nameEl.createEl("h3", { text: "Verses" })
 
-		new Setting(containerEl)
-			.setName('Format')
-			.setDesc('Formatting for individual verses.')
-			.addTextArea(text => text
-				.setPlaceholder("Example: " + DEFAULT_SETTINGS.verse_body_format)
-				.setValue(this.plugin.settings.verse_body_format)
-				.onChange(async (value) => {
-					this.plugin.settings.verse_body_format = value;
-					await this.plugin.saveSettings();
-				}))
+		this.renderVerseFormat(new Setting(containerEl))
 
 		new Setting(containerEl)
 			.setName('Build with dynamic verses')
@@ -1955,6 +1948,34 @@ class BuilderModal extends Modal {
 				.setValue(this.plugin.settings.chapter_name_format)
 				.onChange(async (value) => {
 					this.plugin.settings.chapter_name_format = value;
+					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	// Verse renders
+
+	renderVerseFormat(setting: Setting) {
+		setting.clear()
+		setting
+			.setName('Format')
+			.setDesc('Formatting for individual verses.')
+			.addExtraButton(btn => btn
+				.setIcon("rotate-ccw")
+				.setTooltip("Reset value")
+				.onClick(async () => {
+					this.plugin.settings.verse_body_format
+						= DEFAULT_SETTINGS.verse_body_format;
+					this.renderVerseFormat(setting);
+					await this.plugin.saveSettings();
+				})
+			)
+			.addTextArea(text => text
+				.setPlaceholder("Example: " + DEFAULT_SETTINGS.verse_body_format)
+				.setValue(this.plugin.settings.verse_body_format)
+				.onChange(async (value) => {
+					this.plugin.settings.verse_body_format = value;
 					await this.plugin.saveSettings();
 				})
 			)
