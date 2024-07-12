@@ -229,9 +229,9 @@ export default class MyBible extends Plugin {
 
 		this.addCommand({
 			id: 'clear_cache',
-			name: 'Clear cache',
+			name: 'Clear local files',
 			callback: async () => {
-				new ClearCacheFilesModal(this.app, this).open();
+				new ClearLocalFilesModal(this.app, this).open();
 			}
 		});
 
@@ -239,7 +239,15 @@ export default class MyBible extends Plugin {
 			id: 'download_bible',
 			name: 'Download translation',
 			callback: async () => {
-				await this.bible_api.user_download_translation(this.settings.reading_translation)
+				let modal = new QuickChangeTranslationeModal(this)
+				modal.translations = await this.bible_api.get_translations()
+				modal.onChose = async translation => {
+					await this.bible_api.user_download_translation(
+						translation.abbreviated_name
+					)
+				}
+				modal.open()
+				
 			}
 		});
 
@@ -1038,11 +1046,11 @@ class BibleAPI {
 			setTimeout(ok, 60000 * 60) // Timeout after 1 hour
 		});
 		this.cache_clear_timer
-			.then(() => this.clear_cache())
+			.then(() => this.clear_local_files())
 			.catch(err => { });
 	}
 
-	async clear_cache() {
+	async clear_local_files() {
 		this.chapter_cache = {};
 		this.cache_clear_timer = null;
 
@@ -1050,6 +1058,13 @@ class BibleAPI {
 		if (await this.plugin.app.vault.adapter.exists(cache_path)) {
 			if (!await this.plugin.app.vault.adapter.trashSystem(cache_path)) {
 				await this.plugin.app.vault.adapter.trashLocal(cache_path);
+			}
+		}
+
+		let download_path = this.get_download_path();
+		if (await this.plugin.app.vault.adapter.exists(download_path)) {
+			if (!await this.plugin.app.vault.adapter.trashSystem(download_path)) {
+				await this.plugin.app.vault.adapter.trashLocal(download_path);
 			}
 		}
 	}
@@ -2153,7 +2168,7 @@ class ErrorModal extends Modal {
 	}
 }
 
-class ClearCacheFilesModal extends Modal {
+class ClearLocalFilesModal extends Modal {
 	plugin: MyBible;
 
 	constructor(app: App, plugin: MyBible) {
@@ -2190,7 +2205,7 @@ class ClearCacheFilesModal extends Modal {
 					.setCta()
 					.onClick(async () => {
 						this.close();
-						await this.plugin.bible_api.clear_cache();
+						await this.plugin.bible_api.clear_local_files();
 						new Notice("Cache cleared!");
 					})
 			);
@@ -2347,7 +2362,7 @@ class DownloadBibleModal extends Modal {
 export class QuickChangeTranslationeModal extends FuzzySuggestModal<Translation> {
 	plugin: MyBible
 	translations: Translations
-	onChose: (chosen:Translation) => void | null
+	onChose: (chosen:Translation) => (void|Promise<void>) | null
 
 	constructor(plugin: MyBible) {
 		super(plugin.app);
