@@ -666,16 +666,16 @@ class BuildContext {
 		throw new Error("No book by id ${book_id}");
 	}
 
-	abbreviate_book_name(name:string): string {
-		return name.replace(" ", "").slice(0,3);
+	abbreviate_book_name(name:string, delimeter:string): string {
+		return name.replace(delimeter, "").slice(0,3);
 	}
 
 	format_book_name(plugin:MyBible, book:BookData, casing:string): string {
-		let delim = plugin.settings.book_name_delimiter;
-		let book_name = this.to_case(book.name, casing, delim);
+		let delim = plugin.settings.book_name_delimiter
+		let book_name = this.to_case(book.name, casing, delim)
 
 		if (plugin.settings.book_name_abbreviated) {
-			book_name = this.abbreviate_book_name(book_name);
+			book_name = this.abbreviate_book_name(book_name, delim)
 		}
 
 		return plugin.settings.book_name_format
@@ -689,11 +689,11 @@ class BuildContext {
 	}
 
 	format_book_name_without_order(plugin:MyBible, book:BookData, casing:string): string {
-		let delim = plugin.settings.book_name_delimiter;
-		let book_name = this.to_case(book.name, casing, delim);
+		let delim = plugin.settings.book_name_delimiter
+		let book_name = this.to_case(book.name, casing, delim)
 
 		if (plugin.settings.book_name_abbreviated) {
-			book_name = this.abbreviate_book_name(book_name);
+			book_name = this.abbreviate_book_name(book_name, delim)
 		}
 
 		return book_name
@@ -730,11 +730,11 @@ class BuildContext {
 		if (format.length == 0) {
 			format = DEFAULT_SETTINGS.chapter_name_format;
 		}
-		let pad_by = 3;
-		if (this.get_verse_count() < 10) {
-			pad_by = 1;
-		} else if (this.get_verse_count() < 100) {
-			pad_by = 2;
+		let chapter_pad_by = 3;
+		if (this.book.chapters.length < 10) {
+			chapter_pad_by = 1;
+		} else if (this.book.chapters.length < 100) {
+			chapter_pad_by = 2;
 		}
 
 		let casing = this.plugin.settings.book_name_capitalization;
@@ -796,7 +796,7 @@ class BuildContext {
 			.replace(
 				/{chapter}/g,
 				String(chapter)
-					.padStart(pad_by * Number(this.plugin.settings.padded_chapter), "0"),
+					.padStart(chapter_pad_by * Number(this.plugin.settings.padded_chapter), "0"),
 			)
 			.replace(/{translation}/g, String(this.translation))
 	}
