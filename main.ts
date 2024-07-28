@@ -75,11 +75,15 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 		+ "{verse_text}"
 	,
 	chapter_body_format: "\n"
-		+ "###### Navigation\n*[[{first_chapter_name}|First]] | [[{last_chapter_name}|Previous]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|Next]] | [[{final_chapter_name}|Final]]*\n"
+		+ "###### Navigation\n"
+		+ "**[[{last_chapter_name}|⏪ {last_chapter_name}]] | [[{chapter_index}|Chapters]] | [[{next_chapter_name}|{next_chapter_name} ⏩]]**\n"
+		+ "**[[{first_chapter_name}|First ({first_chapter})]] | [[{final_chapter_name}|Last ({final_chapter})]]**\n"
 		+ "\n"
 		+ "{verses}\n"
 		+ "\n"
-		+ "###### Navigation\n*[[{first_chapter_name}|First]] | [[{last_chapter_name}|Previous]] | [[{chapter_index}|{book}]] | [[{next_chapter_name}|Next]] | [[{final_chapter_name}|Final]]*\n"
+		+ "###### Navigation\n"
+		+ "**[[{last_chapter_name}|⏪ {last_chapter_name}]] | [[{chapter_index}|Chapters]] | [[{next_chapter_name}|{next_chapter_name} ⏩]]**\n"
+		+ "**[[{first_chapter_name}|First ({first_chapter})]] | [[{final_chapter_name}|Last ({final_chapter})]]**\n"
 		+ "\n"
 	,
 	index_enabled: true,
@@ -98,7 +102,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	chapter_index_link_format: "- [[{chapter_name}|{chapter}]]",
 	chapter_index_format: ""
 		+ "###### Navigation\n"
-		+ "*[[{index}|{book}]]*\n"
+		+ "*[[{index}|Books]]*\n"
 		+ "\n"
 		+ "### Chapters\n"
 		+ "{chapters}\n"
@@ -216,7 +220,7 @@ export default class MyBible extends Plugin {
 
 		this.addCommand({
 			id: 'quick_change_translation',
-			name: 'Quick change translation',
+			name: 'Change translation',
 			callback: async () => {
 				let modal = new QuickChangeTranslationeModal(this)
 				modal.translations = await this.bible_api.get_translations()
@@ -312,7 +316,7 @@ export default class MyBible extends Plugin {
 				book_id = await this.bible_api
 					.book_id(this.settings._built_translation||translation, book);
 			}
-			book = (await this.bible_api.get_book(translation, book_id)).name;
+			book = (await this.bible_api.get_book_data(translation, book_id)).name;
 			
 			let text = "";
 			if (book.length === 0) {
@@ -321,15 +325,16 @@ export default class MyBible extends Plugin {
 				text = "[Chapter must be provided]";
 			} else if (verse === -1) {
 				// Whole chapter
-				let verses = await this.bible_api.get_chapter_cached(
+				let verses = await this.bible_api.get_chapter(
 					translation,
 					book_id,
 					chapter,
 				);
-				for (let verse_i of verses.keys()) {
+				for (const verse_i_ of Object.keys(verses)) {
+					const verse_i = Number(verse_i_)
 					let verse = verses[verse_i];
 					text += "<sup>" + (verse_i + 1) + "</sup> " + verse;
-					if (verse_i != verses.length - 1) {
+					if (verse_i != Object.keys(verses).length - 1) {
 						text += "<br>";
 					}
 				}
@@ -344,20 +349,20 @@ export default class MyBible extends Plugin {
 					book_id,
 					chapter,
 					verse,
-				);
+				)
 				if (text.length === 0) {
 					text = "<No text found for {1} {0}:{2} in translation {3}>"
 						.format(String(chapter), book, String(verse), translation)
 				}
 			} else {
 				// Verse range
-				let verses = await this.bible_api.get_chapter_cached(
+				let verses = await this.bible_api.get_chapter(
 					translation,
 					book_id,
 					chapter,
 				);
 				let j = verse;
-				while (j < verse_end + 1 && j < verses.length) {
+				while (j < verse_end + 1 && j < Object.keys(verses).length) {
 					text += "<sup>" + j + "</sup> " + verses[j - 1];
 					if (j != verse_end) {
 						text += "<br>";
@@ -474,22 +479,37 @@ export default class MyBible extends Plugin {
 			let ctx = new BuildContext;
 			ctx.plugin = this
 			ctx.translation = translation;
-			ctx.books = await this.bible_api.get_books(ctx.translation);
+			ctx.books = await this.bible_api.get_books_data(ctx.translation);
 			ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation);
 	
-	
+			// Get translation texts
+			ctx.translation_texts = await this.bible_api
+					.get_translation(ctx.translation);
+
+			// Remove empty chapters from books (HACK: This should be done in a better place, but this is where all the needed information is)
+			if (ctx.translation_texts !== undefined) {
+				for (let book of ctx.books) {
+					let to_remove = []
+					for (let i = 1; i != book.chapters.length+1; i++) {
+						let chapter_texts = ctx.translation_texts.books[book.id]
+						let verses = chapter_texts[i] || {}
+						if (Object.keys(verses).length === 0) {
+							to_remove.push(i)
+						}
+					}
+					for (const i of to_remove.reverse()) {
+						book.chapters.remove(i)
+					}
+				}
+			}
+
 			// Notify progress
 			let built_chapter_count = 0
 			let total_chapter_count = 0
 			for (const i in ctx.books) {
-				total_chapter_count += ctx.books[i].chapters
+				total_chapter_count += ctx.books[i].chapters.length
 			}
 			this.show_toast_progress(0, total_chapter_count)
-	
-			if (!this.settings.build_with_dynamic_verses) {
-				ctx.translation_texts = await this.bible_api
-					.get_translation(ctx.translation);
-			}
 	
 			// Index
 			if (this.settings.index_enabled) {
@@ -502,8 +522,8 @@ export default class MyBible extends Plugin {
 			let file_promises: Array<Promise<any>> = [];
 	
 			for (let book of ctx.books) {
-				ctx.set_book(book.id);
-	
+				ctx.set_book(book);
+				let texts_of_book = ctx.translation_texts.books[book.id]
 	
 				// Book path
 				let book_path = bible_path;
@@ -520,35 +540,38 @@ export default class MyBible extends Plugin {
 					))
 				}
 				
-				for (const chapter_i of Array(ctx.book.chapters).keys()) {
-					ctx.set_chapter(chapter_i+1);
-	
-					// Assemble verses
-					ctx.verses_text = ""
-					const verse_count = ctx.get_verse_count()
-					let verse = 1
-					while (verse !== verse_count+1) {
-						ctx.verse = verse;
-						ctx.verses_text += ctx.format_verse_body(
-							this,
-							this.settings.build_with_dynamic_verses,
-						)
-						if (verse != verse_count) {
-							ctx.verses_text += "\n";
-						}
-						verse += 1
-					}
-	
-					// Chapter name
-					let chapter_note_name = ctx.format_chapter_name();
-	
-					// Chapter body
-					let note_body = ctx.format_chapter_body(this);
-	
-					// Save file
-					let file_path = book_path + "/" + chapter_note_name + ".md"
-	
+				for (const chapter of ctx.book.chapters) {
 					file_promises.push(new Promise(async () => {
+						ctx.set_chapter(chapter);
+						let texts_of_chapter = texts_of_book[chapter]
+
+						// Assemble verses
+						ctx.verses_text = ""
+						let added_verse_count = 0
+						for (const verse_key of Object.keys(texts_of_chapter)) {
+							const verse = Number(verse_key)
+							while (added_verse_count < verse) {
+								ctx.verse = added_verse_count + 1
+								ctx.verses_text += ctx.format_verse_body(
+									this,
+									this.settings.build_with_dynamic_verses,
+								)
+								if (verse_key !== Object.keys(texts_of_chapter).last()) {
+									ctx.verses_text += "\n";
+								}
+								added_verse_count += 1
+							}
+						}
+		
+						// Chapter name
+						let chapter_note_name = ctx.format_chapter_name();
+		
+						// Chapter body
+						let note_body = ctx.format_chapter_body(this);
+		
+						// Save file
+						let file_path = book_path + "/" + chapter_note_name + ".md"
+		
 						await save_file(file_path, note_body)
 						built_chapter_count += 1
 						this.show_toast_progress(
@@ -561,7 +584,6 @@ export default class MyBible extends Plugin {
 	
 			await Promise.all(file_promises);
 		} catch (e)  {
-			console.log("Show err")
 			this.show_toast_error(String(e))
 			throw e
 		}
@@ -616,24 +638,25 @@ export default class MyBible extends Plugin {
 }
 
 class BuildContext {
-	translation: string
+	translation: string = ""
 	translation_texts: TranslationData
-	books: Array<BookData>
+	books: Array<BookData> = []
 	book: BookData
-	last_book: BookData
+	prev_book: BookData
 	next_book: BookData
-	chapter: number
-	last_chapter: number
-	next_chapter: number
+	chapter: number = 0
+	prev_chapter: number = 0
+	next_chapter: number = 0
 	chapters: ChapterData
 	last_chapters: ChapterData
 	next_chapters: ChapterData
-	chapter_verse_count: number
-	verses_text: string
-	verse: number
+	chapter_verse_count: number = 0
+	verses_text: string = ""
+	verse: number = 0
 	verse_counts: VerseCounts
 	plugin: MyBible
 
+	/// Find index of book by ID
 	find_book(book_id:BookId):number {
 		for (let i of this.books.keys()) {
 			if (this.books[i].id === book_id) {
@@ -689,15 +712,15 @@ class BuildContext {
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name())
 			.replace(/{chapter_index}/g, this.format_chapter_index_name(this.book))
-			.replace(/{last_chapter}/g, String(this.last_chapter))
+			.replace(/{last_chapter}/g, String(this.prev_chapter))
 			.replace(/{last_chapter_name}/g, this.format_chapter_name("last"))
-			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(plugin, this.last_book, casing))
+			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(plugin, this.prev_book, casing))
 			.replace(/{next_chapter}/g, String(this.next_chapter))
 			.replace(/{next_chapter_name}/g, this.format_chapter_name("next"))
 			.replace(/{next_chapter_book}/g, this.format_book_name_without_order(plugin, this.next_book, casing))
-			.replace(/{first_chapter}/g, "1")
+			.replace(/{first_chapter}/g, String(this.book.chapters.first()))
 			.replace(/{first_chapter_name}/g, this.format_chapter_name("first"))
-			.replace(/{final_chapter}/g, String(this.book.chapters))
+			.replace(/{final_chapter}/g, String(this.book.chapters.last()))
 			.replace(/{final_chapter_name}/g, this.format_chapter_name("final"))
 			.replace(/{translation}/g, String(this.translation))
 	}
@@ -727,9 +750,9 @@ class BuildContext {
 				break;
 			}
 			case "last": {
-				book_name = this.format_book_name_without_order(this.plugin, this.last_book, casing);
-				order = this.last_book.id
-				chapter = this.last_chapter
+				book_name = this.format_book_name_without_order(this.plugin, this.prev_book, casing);
+				order = this.prev_book.id
+				chapter = this.prev_chapter
 				break;
 			}
 			case "next": {
@@ -741,13 +764,13 @@ class BuildContext {
 			case "first": {
 				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
 				order = this.book.id
-				chapter = 1
+				chapter = this.book.chapters.first() || 1
 				break;
 			}
 			case "final": {
 				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
 				order = this.book.id
-				chapter = this.book.chapters;
+				chapter = this.book.chapters.last() || 1
 				break;
 			}
 			case "custom": {
@@ -791,11 +814,16 @@ class BuildContext {
 				+ "{book_id} {chapter} {verse} \n"
 				+ "```"
 		} else {
-			verse_text = this.translation_texts.books[this.book.id][this.chapter-1][this.verse-1]
+			verse_text = this.translation_texts.books[this.book.id][this.chapter][this.verse]
+			if (verse_text === undefined) {
+				return ""
+			}
 			if (verse_text.contains("<")) {
 				verse_text = verse_text
 					.replace(/<\s*br\s*\/?>/g, "\n") // Breakline tag
-					.replace(/<\/?\s*i*\s*\/?>/g, "*") // Italics tag
+					.replace(/<\s*i*\s*>\s*/g, "*") // Italics open tag
+					.replace(/\s*<\/\s*i*\s*>/g, "*") // Italics open tag
+					.replace(/<\/?\s*i*\s*\/?>/g, "*") // Italics general tag
 					.replace(/<\/?\s*b*\s*\/?>/g, "**") // Bold tag
 					.replace(/<\s*S*\s*>/g, "<sup>*") // Strong open
 					.replace(/<\/\s*S*\s*>/g, "*</sup>") // Strong close
@@ -831,16 +859,17 @@ class BuildContext {
 		let chapter_links = ""
 
 		// Format chapter links
-		for (let i = 0; i != book.chapters; i++) {
+		for (let i = 0; i != book.chapters.length; i++) {
+			let chapter = book.get_chapter_number(i);
 			let link = this.plugin.settings.chapter_index_link_format
 				.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 				.replace(/{book}/g, book_name)
 				.replace(/{book_index}/g, this.format_chapter_index_name(book))
 				.replace(/{translation}/g, String(this.translation))
-				.replace(/{chapter}/g, String(i+1))
-				.replace(/{chapter_name}/g, this.format_chapter_name("custom", i+1))
+				.replace(/{chapter}/g, String(chapter))
+				.replace(/{chapter_name}/g, this.format_chapter_name("custom", chapter))
 			;
-			if (i != book.chapters-1) {
+			if (i != book.chapters.length-1) {
 				link += "\n"
 			}
 			chapter_links += link
@@ -913,28 +942,74 @@ class BuildContext {
 			.replace(/{apocrypha}/g, apocr_links)
 	}
 
-	set_book(book_id:BookId) {
-		let book_i = this.find_book(book_id);
-		this.book = this.books[book_i];
+	set_book(book:BookData) {
+		this.book = book;
 
-		let last_book_i = this.chapter !== 1 ? book_i : book_i-1;
-		if (last_book_i === -1) {
-			last_book_i = this.books.length-1
+		let [next_book, next_chapter] = this.next_chapter_of(this.book, this.chapter)
+		let [prev_book, prev_chapter] = this.prev_chapter_of(this.book, this.chapter)
+		this.next_book = next_book
+		this.next_chapter = next_chapter
+		this.prev_book = prev_book
+		this.prev_chapter = prev_chapter
+	}
+
+	next_chapter_of(
+		book: BookData,
+		chapter:number,
+	): [next_book:BookData, next_chapter:number] {
+		let next_book:BookData = book
+		if (chapter === book.chapters.last()) {
+			// This is the final chapter. Next book is not the same
+			// as the current book
+			let book_i = this.find_book(book.id)
+			if (book_i == this.books.length-1) {
+				// `book` is last book. Next book is first book
+				next_book = this.books[0]
+			} else {
+				// Set next_book to book after current
+				next_book = this.books[book_i+1]
+			}
 		}
-		this.last_book = this.books[last_book_i];
-		
-		let next_book_i = this.chapter !== this.book.chapters ? book_i : book_i+1;
-		if (next_book_i === this.books.length) {
-			next_book_i = 0
+
+		let next_chapter = chapter+1
+		if (next_book.id !== book.id) {
+			// Get first chapter of next book
+			next_chapter = next_book.chapters[0]
 		}
-		this.next_book = this.books[next_book_i];
+
+		return [next_book, next_chapter]
+	}
+
+	prev_chapter_of(
+		book: BookData,
+		chapter:number,
+	): [prev_book:BookData, prev_chapter:number] {
+		let prev_book:BookData = book
+		if (chapter === book.chapters.first()) {
+			// This is the first chapter. Previous book is not the same
+			// as the current book
+			let book_i = this.find_book(book.id)
+			if (book_i == 0) {
+				// `book` is first book. Previous book is final book
+				prev_book = this.books[this.books.length-1]
+			} else {
+				// Set prev_book to book before current
+				prev_book = this.books[book_i-1]
+			}
+		}
+
+		let prev_chapter = chapter-1
+		if (prev_book.id !== book.id) {
+			// Get last chapter of previous book
+			prev_chapter = prev_book.chapters[prev_book.chapters.length-1]
+		}
+
+		return [prev_book, prev_chapter]
 	}
 
 	set_chapter(chapter:number) {
-		this.chapter = chapter;
-		this.set_book(this.book.id);
-		this.last_chapter = chapter !== 1 ? chapter-1 : this.last_book.chapters
-		this.next_chapter = chapter !== this.book.chapters ? chapter+1 : 1
+		this.chapter = chapter
+		this.set_book(this.book)
 	}
 
 	// Sets the capitalization of the given name depending on *name_case*.
@@ -963,46 +1038,207 @@ class VerseCounts {
 
 interface TranslationData {
 	translation: string;
-	books: Record<BookId, Array<ChapterData>>;
+	books: Record<BookId, Record<number, ChapterData>>;
 }
-
-interface BookCache {
-	translation: String;
-	book_id: number;
-	data: BookData | null;
-	mutex: Mutex;
-}
-
-interface BookData {
+class BookData {
+	/// The Book's numeric ID
 	id: number;
-	chapters: number;
+	/// The chapters included in this book by their numeric order
+	chapters: number[];
+	/// The display name for the book
 	name: string;
+
+	constructor(id:number, name:string, chapters:number[]) {
+		this.id = id
+		this.name = name
+		this.chapters = chapters
+	}
+
+	/// Returns the number of the chapter at index
+	get_chapter_number(index:number): number {
+		if (index >= this.chapters.length) {
+			throw new Error("")
+		}
+		return this.chapters[index]
+	}
+
+	has_chapter(chapter:number): boolean {
+		return this.chapters.find((value, _, __) => value === chapter) !== undefined
+	}
 }
 
 type BookId = number;
 
-interface ChapterCache {
-	translation: String;
-	book_id: number;
-	chapter: Number;
-	chapter_data: ChapterData | null;
-	mutex: Mutex;
+/// A record of verses to texts
+type ChapterData = Record<number, string>;
+
+/// Ensures all coroutines wait for the same piece of code to finish
+class SyncCache {
+	syncs:Record<string, SyncCacheItem> = {}
+
+	async sync(key:string, body:() => any): Promise<any> {
+		if (!(key in this.syncs)) {
+			this.syncs[key] = new SyncCacheItem()
+		}
+		let sync_item = this.syncs[key]
+
+		sync_item.ref_count += 1
+
+
+		try {
+			await sync_item.mutex
+				.acquire()
+				.then(async () => {
+					sync_item.data = await body()
+	
+					sync_item.mutex.cancel()
+					sync_item.mutex.release()
+				})
+				.catch(e => {
+					if (e === E_CANCELED) {
+						/*pass*/
+					} else {
+						throw e
+					}
+				})
+			;
+
+		} finally {
+			sync_item.ref_count -= 1
+			if (sync_item.ref_count === 0) {
+				delete this.syncs[key]
+			}
+		}
+		
+		
+		return sync_item.data
+	}
+}
+class SyncCacheItem {
+	mutex: Mutex = new Mutex()
+	data: any = null
+	ref_count: number = 0
 }
 
-type ChapterData = Array<string>;
-
-interface VerseData {
-	pk: string,
-	text: string,
-	verse: number,
-};
-
 class BibleAPI {
-	book_cache: Record<BookKey, BookCache> = {};
 	cache_clear_timer: Promise<null> | null = null;
 	cache_clear_timer_promise_err: (reason?: any) => void;
-	chapter_cache: Record<ChapterKey, ChapterCache> = {};
+	sync_cache: SyncCache = new SyncCache();
 	plugin: MyBible;
+
+	async _get_book_data(translation: string, book_id:BookId): Promise<BookData> {
+		throw new Error("unimplemented")
+	}
+
+	async _get_books_data(translation: string): Promise<Array<BookData>> {
+		throw new Error("unimplemented")
+	}
+
+	async _get_chapter(
+		translation: string,
+		book_id: number,
+		chapter: number,
+	): Promise<ChapterData> {
+		throw new Error("unimplemented")
+	}
+
+	async _get_translation(translation: string): Promise<TranslationData> {
+		throw new Error("unimplemented")
+	}
+
+	async _get_translations(): Promise<Translations> {
+		throw new Error("unimplemented")
+	}
+
+	async get_default_translation(): Promise<string> {
+		throw new Error("unimplemented")
+	}
+
+	async _get_verse(
+		translation: string,
+		book_id: number,
+		chapter: number,
+		verse: number,
+	): Promise<string> {
+		let chapter_data = await this.get_chapter(
+			translation,
+			book_id,
+			chapter,
+		);
+		return chapter_data[verse] || "";
+	}
+
+	async _get_verse_count(translation:string): Promise<VerseCounts> {
+		throw new Error("unimplemented")
+	}
+
+	/// Downloads a translation and saves it locally.
+	async user_download_translation(translation:string) {
+		let notify = new Notice("Downloading {0} translation".format(translation))
+
+		let promises = []
+		let translation_data = await this.get_translation(translation)
+		for (const book_id_ in translation_data.books) {
+			const book_id = Number(book_id_)
+			const chapters = translation_data.books[book_id]
+			for (const chapter_key of Object.keys(chapters)) {
+				const chapter = Number(chapter_key)
+				const chapter_data = chapters[chapter]
+				promises.push(this.save_chapter_data(
+					chapter_data,
+					translation,
+					book_id,
+					chapter,
+				))
+			}
+		}
+
+		await Promise.all(promises)
+
+		notify.hide()
+		new Notice("Download complete")
+	}
+
+	// Get book ID from translation and book name
+	async book_id(translation:string, book_name:string): Promise<number> {
+		let books = await this.get_books_data(translation);
+		for (let i of books.keys()) {
+			if (books[i].name === book_name) {
+				return books[i].id;
+			}
+		}
+
+		if (book_name in DEFAULT_NAME_MAP) {
+			return DEFAULT_NAME_MAP[book_name];
+		}
+
+		throw new Error(
+			"Translation '{0}' has no book named '{1}'"
+				.format(translation, book_name)
+		);
+	}
+
+	async get_book_data(translation: string, book_id:BookId): Promise<BookData> {
+		let book_key = "{0} {1}".format(translation, String(book_id));
+
+		let data = await this.sync_cache.sync(
+			"get_book_data_" + book_key,
+			() => this._get_book_data(translation, book_id),
+		)
+
+		if (data == null) {
+			throw new Error();
+		}
+
+		return data;
+	}
+
+	async get_books_data(translation: string): Promise<Array<BookData>> {
+		return await this.sync_cache.sync(
+			"get_books_data_" + translation,
+			() => this._get_books_data(translation),
+		)
+	}
 
 	async cache_chapter(
 		translation: string,
@@ -1012,13 +1248,6 @@ class BibleAPI {
 		save_locally: boolean,
 	): Promise<void> {
 		let key = this.make_chapter_key(translation, book_id, chapter);
-		this.chapter_cache[key] = {
-			translation: translation,
-			book_id: book_id,
-			chapter: chapter,
-			chapter_data: chapter_data,
-			mutex: new Mutex,
-		};
 
 		// Save chapter to local file sytem
 		let cache_path = this.get_cache_path();
@@ -1052,8 +1281,139 @@ class BibleAPI {
 			.catch(err => { });
 	}
 
+	async get_chapter(
+		translation: string,
+		book_id: number,
+		chapter: number,
+	): Promise<ChapterData> {
+		let chapter_key = this.make_chapter_key(translation, book_id, chapter);
+
+		let file_name = this.make_chapter_file_name(translation, book_id, chapter)
+
+		let download_path = this.get_download_path()
+		this.plugin.app.vault.adapter.mkdir(download_path)
+		let download_file_path = normalizePath(
+			download_path + "/" + file_name
+		)
+
+		let cache_path = this.get_cache_path()
+		this.plugin.app.vault.adapter.mkdir(cache_path)
+		let cached_file_path = normalizePath(
+			cache_path + "/" + file_name
+		)
+
+		let data = await this.sync_cache.sync(
+			"get_chapter_"+chapter_key,
+			async () => {
+				// Attempt to load chapter locally
+				if ( await this.plugin.app.vault.adapter
+					.exists(download_file_path)
+				) {
+					// Load from download
+					return await this.load_chapter_file(download_path, file_name)
+				} else if ( await this.plugin.app.vault.adapter
+					.exists(cached_file_path)
+				) {
+					// Load from cache
+					return await this.load_chapter_file(cache_path, file_name)
+				}
+
+				// Fetch chapter from the web
+				return await this._get_chapter(
+					translation,
+					book_id,
+					chapter,
+				);
+			},
+		)
+
+		if (
+			data === null
+			|| Object.keys(data).length == 0
+		) {
+			// Failed to load or download chapter
+			return [];
+		}
+
+		new Promise(async (ok, err) => {
+			// Cache chapter if not downloaded
+			try {
+				if (
+					!await this.plugin.app.vault.adapter
+						.exists(download_file_path)
+				) {
+					this.cache_chapter(
+						translation,
+						book_id,
+						chapter,
+						data,
+						this.plugin.settings.store_locally,
+					);
+				}
+				ok(null)
+			} catch (e) {
+				err(e)
+			}
+		})
+
+		return data;
+	}
+
+	get_cache_path(): string {
+		return normalizePath(this.plugin.manifest.dir + "/.mybiblecache");
+	}
+
+	get_download_path(): string {
+		return normalizePath(this.plugin.manifest.dir + "/.chapters");
+	}
+
+	async get_translation(translation: string): Promise<TranslationData> {
+		return await this.sync_cache.sync(
+			"get_translation_" + translation,
+			() => this._get_translation(translation),
+		)
+	}
+
+	async _get_default_translation(): Promise<string> {
+		return await this.sync_cache.sync(
+			"get_default_translation",
+			() => this._get_default_translation(),
+		)
+	}
+
+	async get_translations(): Promise<Translations> {
+		return await this.sync_cache.sync(
+			"get_translations",
+			() => this._get_translations(),
+		)
+	}
+
+	async get_verse(
+		translation: string,
+		book_id: number,
+		chapter: number,
+		verse: number,
+	): Promise<string> {
+		let key = "get_verse_{0}_{1}_{2}_{3}".format(translation, String(book_id), String(chapter), String(verse))
+		return await this.sync_cache.sync(
+			key,
+			() => this._get_verse(
+				translation,
+				book_id,
+				chapter,
+				verse,
+			),
+		)
+	}
+
+	async get_verse_count(translation:string): Promise<VerseCounts> {
+		return await this.sync_cache.sync(
+			"get_verse_count_"+translation,
+			() => this._get_verse_count(translation),
+		)
+	}
+
 	async clear_local_files() {
-		this.chapter_cache = {};
 		this.cache_clear_timer = null;
 
 		let cache_path = this.get_cache_path();
@@ -1071,263 +1431,38 @@ class BibleAPI {
 		}
 	}
 
-
-	async book_id(translation:string, book_name:string) {
-		let books = await this.get_books(translation);
-		for (let i of books.keys()) {
-			if (books[i].name === book_name) {
-				return books[i].id;
-			}
-		}
-
-		if (book_name in DEFAULT_NAME_MAP) {
-			return DEFAULT_NAME_MAP[book_name];
-		}
-
-		throw new Error(
-			"Translation '{0}' has no book named '{1}'"
-				.format(translation, book_name)
-		);
-	}
-
-
-	/// Downloads a translation and saves it locally.
-	async user_download_translation(translation:string) {
-		let notify = new Notice("Downloading {0} translation".format(translation))
-
-		let promises = []
-		let translation_data = await this.get_translation(translation)
-		for (const book_id_ in translation_data.books) {
-			const book_id = Number(book_id_)
-			const chapters = translation_data.books[book_id]
-			for (let chapter_i = 0; chapter_i != chapters.length; chapter_i++) {
-				const chapter_data = chapters[chapter_i]
-				promises.push(this.save_chapter_data(
-					chapter_data,
-					translation,
-					book_id,
-					chapter_i+1,
-				))
-			}
-		}
-
-		await Promise.all(promises)
-
-		notify.hide()
-		new Notice("Download complete")
-	}
-
-
-	async get_translation(translation: string): Promise<TranslationData> {
-		throw new Error("unimplemented")
-	}
-
-
-	async get_book(translation: string, book_id:BookId): Promise<BookData> {
-		let book_key = "{0} {1}".format(translation, String(book_id));
-
-		if (!(book_key in this.book_cache)) {
-			this.book_cache[book_key] = {
-				book_id: book_id,
-				translation: translation,
-				data: null,
-				mutex: new Mutex,
-			};
-		}
-
-		let cached = this.book_cache[book_key];
-		if (cached.data === null) {
-			await cached.mutex
-				.acquire()
-				.then(async () => {
-					cached.data = await this._get_book(translation, book_id);
-
-					cached.mutex.cancel();
-					cached.mutex.release();
-				})
-				.catch(err => {
-					if (err === E_CANCELED) {
-
-					} else {
-						throw new Error(err)
-					}
-				});
-		}
-
-		if (cached.data == null) {
-			throw new Error();
-		}
-
-		return cached.data;
-	}
-
-	async _get_book(translation: string, book_id:BookId): Promise<BookData> {
-		throw new Error("unimplemented")
-	}
-
-	get_books(translation: string,): Promise<Array<BookData>> {
-		throw new Error("unimplemented")
-	}
-
-	get_cache_path(): string {
-		return normalizePath(this.plugin.manifest.dir + "/.mybiblecache");
-	}
-
-	get_download_path(): string {
-		return normalizePath(this.plugin.manifest.dir + "/.chapters");
-	}
-
-	async get_chapter_cached(
-		translation: string,
-		book_id: number,
-		chapter: number,
-	): Promise<ChapterData> {
-		let chapter_key = this.make_chapter_key(translation, book_id, chapter);
-
-		if (!(chapter_key in this.chapter_cache)) {
-			this.cache_chapter(
-				translation,
-				book_id,
-				chapter,
-				null,
-				false,
-			);
-		}
-
-		let cached = this.chapter_cache[chapter_key];
-
-		let file_name = this.make_chapter_file_name(translation, book_id, chapter)
-
-		let download_path = this.get_download_path()
-		this.plugin.app.vault.adapter.mkdir(download_path)
-		let download_file_path = normalizePath(
-			download_path + "/" + file_name
-		)
-
-		let cache_path = this.get_cache_path()
-		this.plugin.app.vault.adapter.mkdir(cache_path)
-		let cached_file_path = normalizePath(
-			cache_path + "/" + file_name
-		)
-
-		if (cached.chapter_data === null) {
-			await cached.mutex
-				.acquire()
-				.then(async () => {
-					// Attempt to load chapter locally
-					if (
-						await this.plugin.app.vault.adapter
-							.exists(download_file_path)
-					) {
-						// Load from download
-						cached.chapter_data =  await this
-							.load_chapter_file(download_path, file_name)
-						;
-					} else if (
-						await this.plugin.app.vault.adapter
-							.exists(cached_file_path)
-					) {
-						// Load from cache
-						cached.chapter_data =  await this
-							.load_chapter_file(cache_path, file_name)
-						;
-					}
-
-					if (cached.chapter_data === null) {
-						// Fetch chapter from the web
-						cached.chapter_data = await this.get_chapter_uncached(
-							translation,
-							book_id,
-							chapter,
-						);
-					}
-
-					cached.mutex.cancel();
-					cached.mutex.release();
-				})
-				.catch(err => {
-					if (err === E_CANCELED) {
-						/*pass*/
-					} else {
-						throw new Error(err)
-					}
-				});
-		}
-
-		if (cached.chapter_data === null || cached.chapter_data.length == 0) {
-			// Failed to load or download chapter
-			return [];
-		}
-
-		new Promise(async (ok, err) => {
-			// Cache chapter if not downloaded
-			if (
-				!await this.plugin.app.vault.adapter
-					.exists(download_file_path)
-			) {
-				this.cache_chapter(
-					translation,
-					book_id,
-					chapter,
-					cached.chapter_data,
-					this.plugin.settings.store_locally,
-				);
-			}
-			ok(null)
-		})
-
-		delete this.chapter_cache[chapter_key]
-
-		return cached.chapter_data;
-	}
-
-	async get_chapter_uncached(
-		translation: string,
-		book_id: number,
-		chapter: number,
-	): Promise<ChapterData> {
-		throw new Error("unimplemented")
-	}
-
-	async get_default_translation(): Promise<string> {
-		throw new Error("unimplemented")
-	}
-
-	get_translations(): Promise<Translations> {
-		throw new Error("unimplemented")
-	}
-
-	get_verse(
-		translation: string,
-		book_id: number,
-		chapter: number,
-		verse: number,
-	): Promise<string> {
-		throw new Error("unimplemented")
-	}
-
-
-	async get_verse_count(translation:string): Promise<VerseCounts> {
-		throw new Error("unimplemented")
-	}
-
-
 	async load_chapter_file(folder:string, path: string): Promise<ChapterData> {
 		this.plugin.app.vault.adapter.mkdir(folder)
 		let raw = await this.plugin.app.vault.adapter
 			.read(folder + "/" + path)
+		;
+		
+		let verse_list = []
 		if (raw.startsWith("[")) {
-			return JSON.parse(raw)
+			verse_list = JSON.parse(raw)
+		} else {
+			verse_list = raw.split("\n")
 		}
-		return raw.split("\n")
+		
+		let verses:ChapterData = {}
+		for (let i = 0; i != verse_list.length; i++) {
+			if (verse_list[i].length == 0) {
+				continue
+			}
+			verses[i+1] = verse_list[i]
+		}
+		return verses
 	}
 
-
 	make_chapter_file(chapter_data:ChapterData): string {
+		let added_verse_count = 0
 		let body = "";
-		for (let i of chapter_data.keys()) {
-			body += chapter_data[i];
-			if (i !== chapter_data.length-1) {
+		for (let i = 1; added_verse_count !== Object.keys(chapter_data).length; i++) {
+			if (i in chapter_data) {
+				body += chapter_data[i]
+				added_verse_count += 1
+			}
+			if (added_verse_count !== Object.keys(chapter_data).length) {
 				body += "\n"
 			}
 		}
@@ -1335,13 +1470,11 @@ class BibleAPI {
 		return body
 	}
 
-
 	/// Makes the file name for downloaded chapters
 	make_chapter_file_name(translation: string, book_id: number, chapter: Number): string {
 		return "{0} {1} {2}.txt".format(translation, String(book_id), String(chapter));
 		
 	}
-
 
 	make_chapter_key(translation: string, book_id: number, chapter: Number) {
 		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
@@ -1366,9 +1499,10 @@ class BibleAPI {
 			!await this.plugin.app.vault.adapter.exists(file_path)
 		) {
 			let body = "";
-			for (const i of chapter_data.keys()) {
+			for (const i_ in chapter_data) {
+				const i = Number(i_)
 				body += chapter_data[i];
-				if (i !== chapter_data.length-1) {
+				if (i !== Object.keys(chapter_data).length-1) {
 					body += "\n"
 				}
 			}
@@ -1391,50 +1525,13 @@ interface Translation {
 }
 
 class BollsLifeBibleAPI extends BibleAPI {
-	plugin: MyBible;
-	chapter_cache: Record<ChapterKey, ChapterCache> = {};
-	translations: Translations = {};
-	translation_maps: Record<string, Array<BookData>> = {};
-	cache_clear_timer: Promise<null> | null = null;
-	book_mutex:Mutex = new Mutex;
+	plugin: MyBible
+	translations: Translations = {}
+	translation_maps: Record<string, Array<BookData>> = {}
+	cache_clear_timer: Promise<null> | null = null
+	sync_cache: SyncCache = new SyncCache()
 
-	_chapter_key(translation: string, book_id: number, chapter: Number) {
-		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
-	}
-
-	async _generate_translation_map(translation: string) {
-		let map: Array<Record<string, any>> = await requestUrl(
-			"https://bolls.life/get-books/{0}/".format(translation)
-		).json;
-		let book_data: Array<BookData> = [];
-		for (let item of map) {
-			book_data.push({
-				name: item["name"],
-				chapters: item["chapters"],
-				id: item["bookid"],
-			});
-		}
-		this.translation_maps[translation] = book_data;
-	}
-
-	async _book_to_id(translation: string, book: string): Promise<number> {
-		let book_ = book.toLowerCase();
-		let map = await this._get_translation_map("YLT"); // TODO: Make translation according to user settings
-		for (let i in map) {
-			let book_data = map[i];
-			if (book_ == book_data["name"].toLowerCase()) {
-				return Number(i) + 1;
-			}
-		}
-		throw new Error('No book exists by name {0}.'.format(book));
-	}
-
-	async _id_to_book(translation: string, book_id: number): Promise<string> {
-		let map = await this._get_translation_map("YLT"); // TODO: Make translation according to user settings
-		return map[book_id - 1]["name"];
-	}
-
-	async get_chapter_uncached(
+	async _get_chapter(
 		translation: string,
 		book_id: number,
 		chapter: number,
@@ -1446,13 +1543,10 @@ class BollsLifeBibleAPI extends BibleAPI {
 					.format(translation, String(book_id), String(chapter))
 			));
 
-			let texts = []
+			let texts:ChapterData = {}
 			for (const data of verse_data_list) {
 				let verse = data["verse"]
-				while (texts.length < verse) {
-					texts.push("")
-				}
-				texts[verse-1] = data["text"]
+				texts[verse] = data["text"]
 			}
 
 			return texts
@@ -1464,14 +1558,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 		}
 	}
 
-	async _get_translation_map(translation: string): Promise<Array<BookData>> {
-		if (!(translation in this.translation_maps)) {
-			await this._generate_translation_map(translation);
-		}
-		return this.translation_maps[translation];
-	}
-
-	async get_translation(translation: string): Promise<TranslationData> {
+	async _get_translation(translation: string): Promise<TranslationData> {
 		let verses = JSON.parse(
 			await httpGet(
 				"https://bolls.life/static/translations/{0}.json".format(translation)
@@ -1484,49 +1571,49 @@ class BollsLifeBibleAPI extends BibleAPI {
 		};
 
 		await new Promise(async (ok, err) => {
-			let i = 0;
-			let curr_book_id = -1;
-			let curr_chapter = -1;
-			for (const data of verses) {
-				let verse = data["verse"]
-
-				if (curr_book_id != data["book"]) {
+			try {
+				let i = 0;
+				let curr_book_id = -1;
+				let curr_chapter = -1;
+				for (const data of verses) {
+					let verse = data["verse"]
+	
 					curr_book_id = data["book"]
-					bible.books[curr_book_id] = [];
-					curr_chapter = -1
+					curr_chapter = data["chapter"]
+	
+					if (!(curr_book_id in bible.books)) {
+						bible.books[curr_book_id] = []	
+					}
+					if (!(curr_chapter in bible.books[curr_book_id])) {
+						bible.books[curr_book_id][curr_chapter] = {}
+					}
+	
+					bible.books[curr_book_id][curr_chapter][verse] = data["text"]
+					i += 1;
 				}
-				if (curr_chapter != data["chapter"]) {
-					curr_chapter = data["chapter"];
-					let book_data = bible.books[curr_book_id];
-					book_data.push([]);
-				}
-				while (bible.books[curr_book_id][curr_chapter-1].length < verse) {
-					bible.books[curr_book_id][curr_chapter-1].push("")
-				}
-
-				bible.books[curr_book_id][curr_chapter-1][verse-1] = data["text"]
-				i += 1;
+				ok(null);
+			} catch (e) {
+				err(e)
 			}
-			ok(null);
+		}).catch(e => {
+			throw e
 		})
 
 		return bible;
 	}
 
-	async _get_book(translation: string, book_id:BookId): Promise<BookData> {
-		let books = await this.get_books(translation);
+	async _get_book_data(translation: string, book_id:BookId): Promise<BookData> {
+		let books = await this.get_books_data(translation);
 		for (let book of books) {
 			if (book.id == book_id) {
-				this.book_mutex.cancel();
-				this.book_mutex.release();
 				return book;
 			}
 		}
 		throw new Error();
 	}
 
-	async get_books(translation: string): Promise<BookData[]> {
-		let books = await this._get_translation_map(translation);
+	async _get_books_data(translation: string): Promise<BookData[]> {
+		let books = await this.get_translation_map(translation);
 		books.sort(function(x, y) {
 			if (x.id < y.id) {
 				return -1;
@@ -1539,11 +1626,11 @@ class BollsLifeBibleAPI extends BibleAPI {
 		return books;
 	}
 
-	async get_default_translation(): Promise<string> {
+	async _get_default_translation(): Promise<string> {
 		return "YLT";
 	}
 
-	async get_translations(): Promise<Translations> {
+	async _get_translations(): Promise<Translations> {
 		if (Object.keys(this.translations).length === 0) {
 			let list = JSON.parse(await httpGet(
 				"https://bolls.life/static/bolls/app/views/languages.json"
@@ -1564,28 +1651,57 @@ class BollsLifeBibleAPI extends BibleAPI {
 		return this.translations;
 	}
 
-	async get_verse(
-		translation: string,
-		book_id: number,
-		chapter: number,
-		verse: number,
-	): Promise<string> {
-		let chapter_data = await this.get_chapter_cached(
-			translation,
-			book_id,
-			chapter,
-		);
-
-		return chapter_data[verse - 1] || "";
-	}
-
-	async get_verse_count(translation:string): Promise<VerseCounts> {
+	async _get_verse_count(translation:string): Promise<VerseCounts> {
 		let json = JSON.parse(await httpGet(
 			"https://bolls.life/get-verse-counts/{0}/".format(translation)
 		));
 		let counts = new VerseCounts();
 		counts.books = json;
 		return counts
+	}
+
+	async book_to_id(translation: string, book: string): Promise<number> {
+		let book_ = book.toLowerCase();
+		let map = await this.get_translation_map(translation);
+		for (let i in map) {
+			let book_data = map[i];
+			if (book_ == book_data["name"].toLowerCase()) {
+				return Number(i) + 1;
+			}
+		}
+		throw new Error('No book exists by name {0}.'.format(book));
+	}
+
+	chapter_key(translation: string, book_id: number, chapter: Number) {
+		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
+	}
+
+	async generate_translation_map(translation: string) {
+		let map: Array<Record<string, any>> = await requestUrl(
+			"https://bolls.life/get-books/{0}/".format(translation)
+		).json;
+		let book_data: Array<BookData> = [];
+		for (let item of map) {
+			let chapter_list = [...Array(item["chapters"]).keys()].map(x => x+1)
+			book_data.push(new BookData(
+				item["bookid"],
+				item["name"],
+				chapter_list,
+			));
+		}
+		this.translation_maps[translation] = book_data;
+	}
+
+	async id_to_book(translation: string, book_id: number): Promise<string> {
+		let map = await this.get_translation_map(translation);
+		return map[book_id - 1]["name"];
+	}
+
+	async get_translation_map(translation: string): Promise<Array<BookData>> {
+		if (!(translation in this.translation_maps)) {
+			await this.generate_translation_map(translation);
+		}
+		return this.translation_maps[translation];
 	}
 }
 
@@ -2362,7 +2478,8 @@ class DownloadBibleModal extends Modal {
 
 		let bible = await this.plugin.bible_api.get_translation(translation);
 		for (const book_id in bible.books) {
-			for (let chapter of Array(bible.books[book_id].length).keys()) {
+			for (const chapter_key of Object.keys(bible.books[book_id])) {
+				const chapter = Number(chapter_key)
 				await this.plugin.bible_api.cache_chapter(
 					translation,
 					Number(book_id),
@@ -2547,9 +2664,13 @@ const DEFAULT_NAME_MAP: Record<string, BookId> = {
 	"Baruch": 73,
 	"1 Maccabees": 74,
 	"2 Maccabees": 75,
-	"2 Esdras": 77, // Jump in number
+	"3 Maccabees": 76,
+	"2 Esdras": 77,
 	"Susanna": 78,
 	"Bel and Dragon": 79,
-	"Prayer of Manasseh": 83, // Jump in number
+	"4 Maccabees": 80,
+	"Greek Additions to Esther": 81,
+	"3 Holy Children's Song": 82,
+	"Prayer of Manasseh": 83,
 	"Azariah": 88, // Jump in number
 }
