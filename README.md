@@ -17,7 +17,9 @@ Something missing, or needs improvement? [Submit your own ideas here!](https://g
 I was inspired by Obsidian user [Joschua's](https://joschua.io/) idea of [linking all our notes with scripture](https://notes.joschua.io/60+Outputs/62+Projects/Bible+Study+Kit/Connecting+makes+you+engage+Scripture). He did this by including a copy of the Bible in his vault, with every chapter as one note and each verse as a header within it. I followed his instructions for doing this, and got the Bible in my own vault too, and it's great having the Bible to link to in my vault. I get to see visually how the Bible connects to my studies, my dreams, and more! However, the process was technical, and I don't think I could convince any non-programmer to do this for their own vault. I wanted to change that, so I made My Bible to streamline the process to just a few simple steps, without ever leaving Obsidian.
 
 ### How it works
-My Bible sets up a folder structure and populates it with one note per chapter. The chapters don't contain the text of the Bible; the text is inserted as you read it, allowing you to have any translation you want, represented by the same file/chapter/note. Because of this, you don't even need to download the entire Bible (unless you want to.)
+![](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/blob/master/example_gen_01.png?raw=true)
+
+My Bible sets up a folder structure and populates it with one note per chapter. The chapters don't contain the text of the Bible; the text is inserted as you read it, allowing you to have any translation you want, represented by the same file/chapter/note. Because of this, you can easily and quickly switch translations without affecting the links to your Bible!
 
 ### Notice
 This plugin makes requests to [https://bolls.life/api/](https://bolls.life/api/) to download text and meta-data regarding translations, books, and chapters of the Bible. The plugin does not, itself, contain translations.
