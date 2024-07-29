@@ -1511,7 +1511,7 @@ class BibleAPI {
 			for (const i_ in chapter_data) {
 				const i = Number(i_)
 				body += chapter_data[i];
-				if (i !== Object.keys(chapter_data).length-1) {
+				if (i !== Object.keys(chapter_data).length) {
 					body += "\n"
 				}
 			}
