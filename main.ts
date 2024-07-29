@@ -552,11 +552,15 @@ export default class MyBible extends Plugin {
 							const verse = Number(verse_key)
 							while (added_verse_count < verse) {
 								ctx.verse = added_verse_count + 1
-								ctx.verses_text += ctx.format_verse_body(
+								let text = ctx.format_verse_body(
 									this,
 									this.settings.build_with_dynamic_verses,
 								)
-								if (verse_key !== Object.keys(texts_of_chapter).last()) {
+								ctx.verses_text += text
+								if (
+									!(text.length === 0 && !this.settings.build_with_dynamic_verses)
+									&& verse_key !== Object.keys(texts_of_chapter).last())
+								{
 									ctx.verses_text += "\n";
 								}
 								added_verse_count += 1
