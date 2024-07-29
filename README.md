@@ -25,13 +25,13 @@ This plugin makes requests to [https://bolls.life/api/](https://bolls.life/api/)
 ### Getting started
 1. Download the plugin from the *Community Plugins* list in the Obsidian settings.
 2. Activate *My Bible* in the *Community Plugins* tab in *Settings*.
-3. Press `ctrl+p` to open the command list, then search for and select the command `Open Bible builder`.
+3. Press `ctrl+p` to open the command list, then search for and select the command `Build Bible`.
 4. Configure build settings to your liking, then press `Build`.
 5. Wait while your Bible is built, then start linking your notes to it!
 
 ### Commands
-* `Open Bible builder` - Builds the file structure for the Bible within your vault.
-* `Quick change translation` - Opens a search menu for choosing a new translation for dynamic verses to display.
+* `Build Bible` - Builds the file structure for the Bible within your vault.
+* `Change translation` - Opens a search menu for choosing a new translation for dynamic verses to display.
 * `Download translation` - Opens a search menu of translations you can download. Downloaded translations are used only by dynamic verses for access to the Bible while offline.
 * `Clear local files` - Removes all local bible files, including downloaded translations.
 
