@@ -212,7 +212,7 @@ export default class MyBible extends Plugin {
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: 'create_bible_files',
-			name: 'Open bible builder',
+			name: 'Build Bible',
 			callback: async () => {
 				new BuilderModal(this.app, this).open()
 			}
