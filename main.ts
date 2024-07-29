@@ -1178,7 +1178,10 @@ class BibleAPI {
 
 	/// Downloads a translation and saves it locally.
 	async user_download_translation(translation:string) {
-		let notify = new Notice("Downloading {0} translation".format(translation))
+		let notify = new Notice(
+			"Downloading {0} translation".format(translation),
+			0,
+		)
 
 		let promises = []
 		let translation_data = await this.get_translation(translation)
@@ -1197,6 +1200,8 @@ class BibleAPI {
 			}
 		}
 
+		notify.hide()
+		notify = new Notice("Saving {0} translation files".format(translation), 0)
 		await Promise.all(promises)
 
 		notify.hide()
