@@ -1178,10 +1178,7 @@ class BibleAPI {
 
 	/// Downloads a translation and saves it locally.
 	async user_download_translation(translation:string) {
-		let notify = new Notice(
-			"Downloading {0} translation".format(translation),
-			0,
-		)
+		let notify = new Notice("Downloading {0} translation".format(translation))
 
 		let promises = []
 		let translation_data = await this.get_translation(translation)
@@ -1200,8 +1197,6 @@ class BibleAPI {
 			}
 		}
 
-		notify.hide()
-		notify = new Notice("Saving {0} translation files".format(translation), 0)
 		await Promise.all(promises)
 
 		notify.hide()
@@ -2327,13 +2322,13 @@ class ClearLocalFilesModal extends Modal {
 
 		let bible_path = this.plugin.settings.bible_folder;
 
-		contentEl.createEl("h1", { text: "Clear cache?" });
+		contentEl.createEl("h1", { text: "Clear local files?" });
 		contentEl.createEl("span", {
-			text: "You are about to clear out all cached chapters from your file system. This includes translations you manually downloaded."
+			text: "You are about to clear out all files added by My Bible from your file system. This includes temporay cached chapters and translations you manually downloaded."
 				.format(bible_path)
 		});
 		contentEl.createEl("p", {
-			text: "Do you want to clear the cache?"
+			text: "Do you want to clear these files?"
 		});
 		contentEl.createEl("p", {});
 
@@ -2347,12 +2342,12 @@ class ClearLocalFilesModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-					.setButtonText("Clear cache")
+					.setButtonText("Clear files")
 					.setCta()
 					.onClick(async () => {
 						this.close();
 						await this.plugin.bible_api.clear_local_files();
-						new Notice("Cache cleared!");
+						new Notice("Files cleared!");
 					})
 			);
 	}
