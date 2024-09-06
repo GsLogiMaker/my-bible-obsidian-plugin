@@ -2596,6 +2596,10 @@ class SettingsTab extends PluginSettingTab {
 				drop.setValue(this.plugin.settings.reading_translation);
 			})
 		;
+
+		new Setting(containerEl)
+			.setDesc('Looking for build settings? They have been moved to the `Book builder` menu. You can access the menu via the `My Bible: Build Bible` command.')
+		;
 	}
 }
 
