@@ -332,7 +332,6 @@ export default class MyBible extends Plugin {
 				);
 				for (const verse_i_ of Object.keys(verses)) {
 					const verse_i = Number(verse_i_)
-					console.log(verse_i)
 					let verse = verses[verse_i];
 					text += "<sup>" + (verse_i) + "</sup> " + verse;
 					if (verse_i != Object.keys(verses).length+1) {
@@ -1553,7 +1552,6 @@ class BollsLifeBibleAPI extends BibleAPI {
 				"https://bolls.life/get-chapter/{0}/{1}/{2}/"
 					.format(translation, String(book_id), String(chapter))
 			));
-			console.log(verse_data_list)
 
 			let texts:ChapterData = {}
 			for (const data of verse_data_list) {
