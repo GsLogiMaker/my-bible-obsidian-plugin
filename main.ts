@@ -825,13 +825,19 @@ class BuildContext {
 			}
 			if (verse_text.contains("<")) {
 				verse_text = verse_text
+					// Replace <i>x with *x
+					.replace(/<\s*i\s*>(\s*)/g, (_, ws) => { return ws + "*" })
+					// Replace x</i> with x*
+					.replace(/(\s*)<\s*\/\s*i\s*>/g, (_, ws) => { return "*" + ws })
+					// Replace <b>x with **x
+					.replace(/<\s*b\s*>(\s*)/g, (_, ws) => { return ws + "**" })
+					// Replace x</b> with x**
+					.replace(/(\s*)<\s*\/\s*b\s*>/g, (_, ws) => { return "**" + ws })
+					// Replace <S>x with <sup>*x
+					.replace(/<\s*S\s*>(\s*)/g, (_, ws) => { return ws + "<sup>*" })
+					// Replace x</S> with x*</sup>
+					.replace(/(\s*)<\s*\/\s*S\s*>/g, (_, ws) => { return "*</sup>" + ws })
 					.replace(/<\s*br\s*\/?>/g, "\n") // Breakline tag
-					.replace(/<\s*i*\s*>\s*/g, "*") // Italics open tag
-					.replace(/\s*<\/\s*i*\s*>/g, "*") // Italics open tag
-					.replace(/<\/?\s*i*\s*\/?>/g, "*") // Italics general tag
-					.replace(/<\/?\s*b*\s*\/?>/g, "**") // Bold tag
-					.replace(/<\s*S*\s*>/g, "<sup>*") // Strong open
-					.replace(/<\/\s*S*\s*>/g, "*</sup>") // Strong close
 					.replace(/<\/?\s*\w*\s*\/?>/g, "") // Any other tags
 				;
 			}
