@@ -364,7 +364,7 @@ export default class MyBible extends Plugin {
 				);
 				let j = verse;
 				while (j < verse_end + 1 && j < Object.keys(verses).length) {
-					text += "<sup>" + j + "</sup> " + verses[j - 1];
+					text += "<sup>" + j + "</sup> " + verses[j];
 					if (j != verse_end) {
 						text += "<br>";
 					}
