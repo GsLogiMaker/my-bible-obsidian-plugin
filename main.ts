@@ -75,16 +75,15 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 		+ "{verse_text}"
 	,
 	chapter_body_format: "\n"
-		+ "###### Navigation\n"
-		+ "**[[{last_chapter_name}|⏪ {last_chapter_name}]] | [[{chapter_index}|Chapters]] | [[{next_chapter_name}|{next_chapter_name} ⏩]]**\n"
-		+ "**[[{first_chapter_name}|First ({first_chapter})]] | [[{final_chapter_name}|Last ({final_chapter})]]**\n"
+		+ "##### "
+			+ "**[[{last_chapter_name}|⏪ {last_chapter_name}]] | [[{chapter_index}|Chapters]] | [[{next_chapter_name}|{next_chapter_name} ⏩]]**<br>"
+			+ "**[[{first_chapter_name}|First ({first_chapter})]] | [[{final_chapter_name}|Last ({final_chapter})]]**<br><br>\n"
 		+ "\n"
 		+ "{verses}\n"
 		+ "\n"
-		+ "###### Navigation\n"
-		+ "**[[{last_chapter_name}|⏪ {last_chapter_name}]] | [[{chapter_index}|Chapters]] | [[{next_chapter_name}|{next_chapter_name} ⏩]]**\n"
-		+ "**[[{first_chapter_name}|First ({first_chapter})]] | [[{final_chapter_name}|Last ({final_chapter})]]**\n"
-		+ "\n"
+		+ "##### "
+			+ "**[[{last_chapter_name}|⏪ {last_chapter_name}]] | [[{chapter_index}|Chapters]] | [[{next_chapter_name}|{next_chapter_name} ⏩]]**<br>"
+			+ "**[[{first_chapter_name}|First ({first_chapter})]] | [[{final_chapter_name}|Last ({final_chapter})]]**\n"
 	,
 	index_enabled: true,
 	index_name_format: "-- Bible --",
@@ -101,8 +100,8 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	chapter_index_name_format: "-- {book} --",
 	chapter_index_link_format: "- [[{chapter_name}|{chapter}]]",
 	chapter_index_format: ""
-		+ "###### Navigation\n"
-		+ "*[[{index}|Books]]*\n"
+		+ "##### "
+			+ "*[[{index}|Books]]*\n"
 		+ "\n"
 		+ "### Chapters\n"
 		+ "{chapters}\n"
