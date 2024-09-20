@@ -6,3 +6,50 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+
+/* --- Compact verse styling --- */
+
+	.block-language-verse {
+		/* Make verse codeblocks mimic normal text in reading mode */
+		margin-top: 16px;
+		margin-bottom: 16px;
+	}
+	.cm-preview-code-block .block-language-verse {
+		/* Reverse previous affects in writing mode */
+		margin-top: 0px;
+		margin-bottom: 0px;
+	}
+	.popover .block-language-verse {
+		/* Reverse previous affects in popups */
+		margin-top: 0px;
+		margin-bottom: 0px;
+	}
+
+	.markdown-preview-view h6 {
+		/* Verse style general (reading mode) */
+		position: relative;
+		top: 26px;
+		left: -22px;
+		margin-top: -28px;
+		margin-bottom: 0px;
+		margin-right: 3px;
+		line-height: 0px;
+		font-family: var(--font-family-preview);
+		font-weight: 500;
+		font-size: 10px !important;
+		font-weight: bold;
+		font-style: normal;;
+		color: var(--text-faint) !important;
+	}
+	.inline-embed .markdown-preview-view h6  {
+		/* Verse style specific to embedded links */
+		left: -1px;
+		margin-top: -22px;
+		margin-bottom: 30px;
+	}
+	.popover .markdown-preview-view h6  {
+		/* Verse style specific to popovers from hovering over links */
+		top: 10px;
+		margin-top: 0px;
+	}
