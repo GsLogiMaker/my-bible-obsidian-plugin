@@ -35,6 +35,7 @@ class MyBibleSettings {
 	book_name_abbreviated: boolean;
 
 	padded_chapter: boolean;
+	book_ordering: string;
 	chapter_name_format: string;
 	chapter_body_format: string;
 
@@ -70,6 +71,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	book_name_abbreviated: false,
 	padded_order: true,
 	padded_chapter: false,
+	book_ordering: "christian",
 	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
 		+ "{verse_text}"
@@ -1837,6 +1839,7 @@ class BuilderModal extends Modal {
 		this.renderBookCapitalization(new Setting(containerEl));
 		this.renderBookAbbreviation(new Setting(containerEl));
 		this.renderPaddedOrderNums(new Setting(containerEl));
+		this.renderBookOrdering(new Setting(containerEl));
 
 		// Book index
 		let index_header  = new Setting(containerEl)
@@ -2025,6 +2028,26 @@ class BuilderModal extends Modal {
 				.onChange(async (value) => {
 					this.plugin.settings.padded_order = value;
 					await this.plugin.saveSettings();
+				})
+			)
+		;
+	}
+
+	renderBookOrdering(setting: Setting) {
+		let desc = new DocumentFragment()
+		desc.appendText("Coose which tradition to use when ordering the books of your Bible.");
+		desc.createEl("a", {"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Book-orderings", "text":" More about book ordering"})
+		setting.clear()
+		setting
+			.setName('Book ordering')
+			.setDesc(desc)
+			.addDropdown((x) => x
+				.addOption("christian", "Christian")
+				.addOption("hebraic", "Hebraic")
+				.setValue(this.plugin.settings.book_ordering)
+				.onChange(async (value) => {
+					this.plugin.settings.book_ordering = value
+					await this.plugin.saveSettings()
 				})
 			)
 		;
