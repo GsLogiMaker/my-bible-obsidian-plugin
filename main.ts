@@ -478,11 +478,11 @@ export default class MyBible extends Plugin {
 			this.settings._built_translation = translation;
 			await this.saveSettings();
 	
-			let ctx = new BuildContext;
+			let ctx = new BuildContext
 			ctx.plugin = this
-			ctx.translation = translation;
-			ctx.books = await this.bible_api.get_books_data(ctx.translation);
-			ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation);
+			ctx.translation = translation
+			ctx.set_books(await this.bible_api.get_books_data(ctx.translation))
+			ctx.verse_counts = await this.bible_api.get_verse_count(ctx.translation)
 	
 			// Get translation texts
 			ctx.translation_texts = await this.bible_api
@@ -490,7 +490,8 @@ export default class MyBible extends Plugin {
 
 			// Remove empty chapters from books (HACK: This should be done in a better place, but this is where all the needed information is)
 			if (ctx.translation_texts !== undefined) {
-				for (let book of ctx.books) {
+				for (const BOOK_ID of Object.keys(ctx.books) as unknown as number[]) {
+					let book = ctx.books[BOOK_ID]
 					let to_remove = []
 					for (let i = 1; i != book.chapters.length+1; i++) {
 						let chapter_texts = ctx.translation_texts.books[book.id]
@@ -523,12 +524,13 @@ export default class MyBible extends Plugin {
 	
 			let file_promises: Array<Promise<any>> = [];
 	
-			for (let book of ctx.books) {
-				ctx.set_book(book);
+			for (const BOOK_ID of Object.keys(ctx.books) as unknown as number[]) {
+				let book = ctx.books[BOOK_ID]
+				ctx.set_book_and_chapter(book, book.chapters[0])
 				let texts_of_book = ctx.translation_texts.books[book.id]
 	
 				// Book path
-				let book_path = bible_path;
+				let book_path = bible_path
 				if (this.settings.book_folders_enabled) {
 					book_path += "/" + ctx.format_book_name(this, ctx.book, this.settings.book_name_capitalization);
 					this.app.vault.adapter.mkdir(normalizePath(book_path));
@@ -646,11 +648,16 @@ export default class MyBible extends Plugin {
 class BuildContext {
 	translation: string = ""
 	translation_texts: TranslationData
-	books: Array<BookData> = []
+	books: Record<BookId, BookData> = {}
+	/// List of book IDs sorted by their ordering as specified in the build settings
+	sorted_book_ids: BookId[]
+	/// Book of the current chapter
 	book: BookData
+	/// Book of previous chapter
 	prev_book: BookData
+	/// Book of next chapter
 	next_book: BookData
-	chapter: number = 0
+	chapter: number = 1
 	prev_chapter: number = 0
 	next_chapter: number = 0
 	chapters: ChapterData
@@ -664,12 +671,7 @@ class BuildContext {
 
 	/// Find index of book by ID
 	find_book(book_id:BookId):number {
-		for (let i of this.books.keys()) {
-			if (this.books[i].id === book_id) {
-				return i;
-			}
-		}
-		throw new Error("No book by id ${book_id}");
+		return book_id
 	}
 
 	abbreviate_book_name(name:string, delimeter:string): string {
@@ -687,7 +689,7 @@ class BuildContext {
 		return plugin.settings.book_name_format
 			.replace(
 				/{order}/g,
-				String(book.id)
+				String(this.book_order(book))
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{book}/g, book_name)
@@ -712,7 +714,7 @@ class BuildContext {
 			.replace(/{book}/g, this.format_book_name_without_order(plugin, this.book, casing))
 			.replace(
 				/{order}/g,
-				String(this.book.id)
+				String(this.book_order(this.book))
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(this.chapter))
@@ -746,42 +748,42 @@ class BuildContext {
 		let casing = this.plugin.settings.book_name_capitalization;
 		let delim = this.plugin.settings.book_name_delimiter;
 		let book_name = "";
-		let order = -1;
+		let id = -1;
 		let chapter = custom_chapter
 		switch (tense) {
 			case "current": {
 				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
-				order = this.book.id
+				id = this.book.id
 				chapter = this.chapter
 				break;
 			}
 			case "last": {
 				book_name = this.format_book_name_without_order(this.plugin, this.prev_book, casing);
-				order = this.prev_book.id
+				id = this.prev_book.id
 				chapter = this.prev_chapter
 				break;
 			}
 			case "next": {
 				book_name = this.format_book_name_without_order(this.plugin, this.next_book, casing);
-				order = this.next_book.id
+				id = this.next_book.id
 				chapter = this.next_chapter
 				break;
 			}
 			case "first": {
 				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
-				order = this.book.id
+				id = this.book.id
 				chapter = this.book.chapters.first() || 1
 				break;
 			}
 			case "final": {
 				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
-				order = this.book.id
+				id = this.book.id
 				chapter = this.book.chapters.last() || 1
 				break;
 			}
 			case "custom": {
 				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
-				order = this.book.id
+				id = this.book.id
 				chapter = custom_chapter;
 				break;
 			}
@@ -796,7 +798,7 @@ class BuildContext {
 			.replace(/{book}/g, book_name)
 			.replace(
 				/{order}/g,
-				String(order)
+				String(this.book_order(id))
 					.padStart(2 * Number(this.plugin.settings.padded_order), "0")
 			)
 			.replace(
@@ -852,7 +854,7 @@ class BuildContext {
 			.replace(/{book_id}/g, String(this.book.id))
 			.replace(
 				/{order}/g,
-				String(this.book.id)
+				String(this.book_order(this.book))
 					.padStart(2 * Number(plugin.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(this.chapter))
@@ -874,7 +876,7 @@ class BuildContext {
 		for (let i = 0; i != book.chapters.length; i++) {
 			let chapter = book.get_chapter_number(i);
 			let link = this.plugin.settings.chapter_index_link_format
-				.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+				.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 				.replace(/{book}/g, book_name)
 				.replace(/{book_index}/g, this.format_chapter_index_name(book))
 				.replace(/{translation}/g, String(this.translation))
@@ -888,7 +890,7 @@ class BuildContext {
 		}
 
 		return this.plugin.settings.chapter_index_format
-			.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{book}/g, book_name)
 			.replace(/{book_index}/g, this.format_chapter_index_name(book))
 			.replace(/{translation}/g, String(this.translation))
@@ -904,7 +906,7 @@ class BuildContext {
 			this.plugin.settings.book_name_capitalization,
 		);
 		return this.plugin.settings.chapter_index_name_format
-			.replace(/{order}/g, String(book.id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{book}/g, book_name)
 			.replace(/{translation}/g, String(this.translation))
 	}
@@ -920,23 +922,23 @@ class BuildContext {
 		let apocr_links = ""
 
 		// Format all book links
-		for (const i in this.books) {
+		for (const ID in this.books) {
 			let book_name = this.format_book_name_without_order(
 				this.plugin,
-				this.books[i],
+				this.books[ID],
 				this.plugin.settings.book_name_capitalization,
 			);
 
 			let link = this.plugin.settings.index_link_format
-				.replace(/{order}/g, String(this.books[i].id).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+				.replace(/{order}/g, String(this.book_order(Number(ID))).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 				.replace(/{book}/g, book_name)
-				.replace(/{book_index}/g, this.format_chapter_index_name(this.books[i]))
+				.replace(/{book_index}/g, this.format_chapter_index_name(this.books[ID]))
 				.replace(/{translation}/g, String(this.translation))
 				+ '\n'
 
-			if (this.books[i].id < 40) {
+			if (this.books[ID].id < 40) {
 				old_t_links += link 
-			} else if (this.books[i].id < 67) {
+			} else if (this.books[ID].id < 67) {
 				new_t_links += link 
 			} else {
 				apocr_links += link 
@@ -965,6 +967,18 @@ class BuildContext {
 		this.prev_chapter = prev_chapter
 	}
 
+	set_book_and_chapter(book:BookData, chapter:number) {
+		this.chapter = chapter
+		this.set_book(book)
+	}
+
+	set_books(books:Record<BookId, BookData>) {
+		this.books = books
+		this.sorted_book_ids = (
+			Object.keys(this.books)
+		).map((x) => Number(x)).sort((a, b) => this.book_order(a)-this.book_order(b))
+	}
+
 	next_chapter_of(
 		book: BookData,
 		chapter:number,
@@ -973,13 +987,19 @@ class BuildContext {
 		if (chapter === book.chapters.last()) {
 			// This is the final chapter. Next book is not the same
 			// as the current book
-			let book_i = this.find_book(book.id)
-			if (book_i == this.books.length-1) {
+			let current_book_index = 0
+			for (const i of this.sorted_book_ids.keys()) {
+				if (this.sorted_book_ids[i] === book.id) {
+					current_book_index = i
+					break;
+				}
+			}
+			if (current_book_index == this.sorted_book_ids.length-1) {
 				// `book` is last book. Next book is first book
-				next_book = this.books[0]
+				next_book = this.books[this.sorted_book_ids[0]]
 			} else {
 				// Set next_book to book after current
-				next_book = this.books[book_i+1]
+				next_book = this.books[this.sorted_book_ids[current_book_index+1]]
 			}
 		}
 
@@ -1000,13 +1020,21 @@ class BuildContext {
 		if (chapter === book.chapters.first()) {
 			// This is the first chapter. Previous book is not the same
 			// as the current book
-			let book_i = this.find_book(book.id)
-			if (book_i == 0) {
-				// `book` is first book. Previous book is final book
-				prev_book = this.books[this.books.length-1]
+			let current_book_index = 0
+			for (const i of this.sorted_book_ids.keys()) {
+				if (this.sorted_book_ids[i] === book.id) {
+					current_book_index = i
+					break;
+				}
+			}
+			if (current_book_index == 0) {
+				// `book` is first book. Previous book is last book
+				prev_book = this.books[
+					this.sorted_book_ids[this.sorted_book_ids.length-1]
+				]
 			} else {
 				// Set prev_book to book before current
-				prev_book = this.books[book_i-1]
+				prev_book = this.books[this.sorted_book_ids[current_book_index-1]]
 			}
 		}
 
@@ -1017,6 +1045,24 @@ class BuildContext {
 		}
 
 		return [prev_book, prev_chapter]
+	}
+
+	book_order(
+		book: BookData|BookId|null = null,
+	) {
+		let book_obj:BookData
+		if (book == null) {
+			book_obj = this.book
+		} else if (book instanceof BookData) {
+			book_obj = book
+		} else {
+			book_obj = this.books[book]
+		}
+
+		if (this.plugin.settings.book_ordering === "hebraic") {
+			return to_hebraic_order(book_obj.id)
+		}
+		return book_obj.id
 	}
 
 	set_chapter(chapter:number) {
@@ -1142,7 +1188,7 @@ class BibleAPI {
 		throw new Error("unimplemented")
 	}
 
-	async _get_books_data(translation: string): Promise<Array<BookData>> {
+	async _get_books_data(translation: string): Promise<Record<BookId, BookData>> {
 		throw new Error("unimplemented")
 	}
 
@@ -1219,12 +1265,11 @@ class BibleAPI {
 	// Get book ID from translation and book name
 	async book_id(translation:string, book_name:string): Promise<number> {
 		let books = await this.get_books_data(translation);
-		for (let i of books.keys()) {
+		for (const i of Object.keys(books) as unknown as BookId[]) {
 			if (books[i].name === book_name) {
 				return books[i].id;
 			}
 		}
-
 		if (book_name in DEFAULT_NAME_MAP) {
 			return DEFAULT_NAME_MAP[book_name];
 		}
@@ -1250,7 +1295,7 @@ class BibleAPI {
 		return data;
 	}
 
-	async get_books_data(translation: string): Promise<Array<BookData>> {
+	async get_books_data(translation: string): Promise<Record<BookId, BookData>> {
 		return await this.sync_cache.sync(
 			"get_books_data_" + translation,
 			() => this._get_books_data(translation),
@@ -1544,7 +1589,7 @@ interface Translation {
 class BollsLifeBibleAPI extends BibleAPI {
 	plugin: MyBible
 	translations: Translations = {}
-	translation_maps: Record<string, Array<BookData>> = {}
+	translation_maps: Record<string, Record<BookId, BookData>> = {}
 	cache_clear_timer: Promise<null> | null = null
 	sync_cache: SyncCache = new SyncCache()
 
@@ -1621,7 +1666,8 @@ class BollsLifeBibleAPI extends BibleAPI {
 
 	async _get_book_data(translation: string, book_id:BookId): Promise<BookData> {
 		let books = await this.get_books_data(translation);
-		for (let book of books) {
+		for (const BOOK_ID of Object.keys(books) as unknown as BookId[]) {
+			let book = books[BOOK_ID]
 			if (book.id == book_id) {
 				return book;
 			}
@@ -1629,17 +1675,8 @@ class BollsLifeBibleAPI extends BibleAPI {
 		throw new Error();
 	}
 
-	async _get_books_data(translation: string): Promise<BookData[]> {
+	async _get_books_data(translation: string): Promise<Record<BookId, BookData>> {
 		let books = await this.get_translation_map(translation);
-		books.sort(function(x, y) {
-			if (x.id < y.id) {
-				return -1;
-			}
-			if (x.id > y.id) {
-				return 1;
-			}
-			return 0;
-		});
 		return books;
 	}
 
@@ -1697,14 +1734,14 @@ class BollsLifeBibleAPI extends BibleAPI {
 		let map: Array<Record<string, any>> = await requestUrl(
 			"https://bolls.life/get-books/{0}/".format(translation)
 		).json;
-		let book_data: Array<BookData> = [];
+		let book_data: Record<BookId, BookData> = [];
 		for (let item of map) {
 			let chapter_list = [...Array(item["chapters"]).keys()].map(x => x+1)
-			book_data.push(new BookData(
+			book_data[item["bookid"]] = new BookData(
 				item["bookid"],
 				item["name"],
 				chapter_list,
-			));
+			);
 		}
 		this.translation_maps[translation] = book_data;
 	}
@@ -1714,7 +1751,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 		return map[book_id - 1]["name"];
 	}
 
-	async get_translation_map(translation: string): Promise<Array<BookData>> {
+	async get_translation_map(translation: string): Promise<Record<BookId, BookData>> {
 		if (!(translation in this.translation_maps)) {
 			await this.generate_translation_map(translation);
 		}
@@ -1787,9 +1824,12 @@ class BuilderModal extends Modal {
 
 		this.renderBuildButton(new Setting(containerEl));
 
+		new Setting(containerEl).nameEl.createEl("h3", { text: "Advanced" })
+
+
 		// Chapters
 
-		new Setting(containerEl).nameEl.createEl("h3", { text: "Chapters" })
+		new Setting(containerEl).nameEl.createEl("h4", { text: "Chapters" })
 		
 		this.renderChapterName(new Setting(containerEl));
 
@@ -1808,7 +1848,7 @@ class BuilderModal extends Modal {
 
 		// Verses
 
-		new Setting(containerEl).nameEl.createEl("h3", { text: "Verses" })
+		new Setting(containerEl).nameEl.createEl("h4", { text: "Verses" })
 
 		this.renderVerseFormat(new Setting(containerEl))
 
@@ -1825,7 +1865,7 @@ class BuilderModal extends Modal {
 
 		// Books
 		let books_header = new Setting(containerEl)
-		books_header.nameEl.createEl("h3", { text: "Books" })
+		books_header.nameEl.createEl("h4", { text: "Books" })
 		books_header.addToggle(toggle => {toggle
 			.setTooltip("Toggle if books should generate folders")
 				.setValue(this.plugin.settings.book_folders_enabled)
@@ -1855,7 +1895,7 @@ class BuilderModal extends Modal {
 					await this.plugin.saveSettings();
 				})
 			})
-			.nameEl.createEl("h3", { text: "Book index" })
+			.nameEl.createEl("h4", { text: "Book index" })
 		;
 
 		this.renderIndexName(index_name)
@@ -1876,7 +1916,7 @@ class BuilderModal extends Modal {
 					await this.plugin.saveSettings();
 				})
 			})
-			.nameEl.createEl("h3", { text: "Chapter indexs" })
+			.nameEl.createEl("h4", { text: "Chapter indexes" })
 		;
 		this.renderChapterIndexName(chapter_index_name)
 		this.renderChapterIndexLink(chapter_index_links)
@@ -2021,7 +2061,7 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Pad order numbers')
-			.setDesc('When Active, pads order numbers with extra zeros. For example, "1 Genesis" would become "01 Gensis" when active.')
+			.setDesc('When Active, pads order numbers with extra zeros. For example, "1 Genesis" would become "01 Genesis" when active.')
 			.addToggle(toggle => toggle
 				.setTooltip("Toggle alignment padding of book order numbers")
 				.setValue(this.plugin.settings.padded_order)
@@ -2035,7 +2075,7 @@ class BuilderModal extends Modal {
 
 	renderBookOrdering(setting: Setting) {
 		let desc = new DocumentFragment()
-		desc.appendText("Coose which tradition to use when ordering the books of your Bible.");
+		desc.appendText("Choose how you want the books ordered in your Bible.");
 		desc.createEl("a", {"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Book-orderings", "text":" More about book ordering"})
 		setting.clear()
 		setting
@@ -2629,6 +2669,23 @@ class SettingsTab extends PluginSettingTab {
 	}
 }
 
+function book_id_to_name(id: BookId):string {
+	for (const x of Object.keys(DEFAULT_NAME_MAP)) {
+		if (DEFAULT_NAME_MAP[x] === id) {
+			return x
+		}
+	}
+	throw "No book by ID {0} exists".format(String(id))
+}
+
+function to_hebraic_order(id: BookId) {
+	const BOOK_NAME = book_id_to_name(id)
+	if (!(BOOK_NAME in HEBRAIC_ORDER))  {
+		return id
+	}
+	return HEBRAIC_ORDER[BOOK_NAME]
+}
+
 const DEFAULT_NAME_MAP: Record<string, BookId> = {
 	"Genesis": 1,
 	"Exodus": 2,
@@ -2715,4 +2772,48 @@ const DEFAULT_NAME_MAP: Record<string, BookId> = {
 	"3 Holy Children's Song": 82,
 	"Prayer of Manasseh": 83,
 	"Azariah": 88, // Jump in number
+}
+
+/// Maps book IDs to their hebraic ordering.
+/// Absent books retain the order according to their IDs.
+const HEBRAIC_ORDER: Record<string, BookId> = {
+	"Genesis": 1,		// Torah
+	"Exodus": 2,
+	"Leviticus": 3,
+	"Numbers": 4,
+	"Deuteronomy": 5,
+	"Joshua": 6,		// Nevi'im
+	"Judges": 7,
+	"1 Samuel": 8,
+	"2 Samuel": 9,
+	"1 Kings": 10,
+	"2 Kings": 11,
+	"Isaiah": 12,		// Ketuvim
+	"Jeremiah": 13,
+	"Ezekiel": 14,
+	"Hosea": 15,
+	"Joel": 16,
+	"Amos": 17,
+	"Obadiah": 18,
+	"Jonah": 19,
+	"Micah": 20,
+	"Nahum": 21,
+	"Habakkuk": 22,
+	"Zephaniah": 23,
+	"Haggai": 24,
+	"Zechariah": 25,
+	"Malachi": 26,
+	"Psalms": 27,
+	"Proverbs": 28,
+	"Job": 29,
+	"Song of Solomon": 30,
+	"Ruth": 31,
+	"Lamentations": 32,
+	"Ecclesiastes": 33,
+	"Esther": 34,
+	"Daniel": 35,
+	"Ezra": 36,
+	"Nehemiah": 37,
+	"1 Chronicles": 38,
+	"2 Chronicles": 39,
 }
