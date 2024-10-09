@@ -532,7 +532,7 @@ export default class MyBible extends Plugin {
 				// Book path
 				let book_path = bible_path
 				if (this.settings.book_folders_enabled) {
-					book_path += "/" + ctx.format_book_name(this, ctx.book, this.settings.book_name_capitalization);
+					book_path += "/" + ctx.format_book_name(ctx.book);
 					this.app.vault.adapter.mkdir(normalizePath(book_path));
 				}
 	
@@ -556,10 +556,7 @@ export default class MyBible extends Plugin {
 							const verse = Number(verse_key)
 							while (added_verse_count < verse) {
 								ctx.verse = added_verse_count + 1
-								let text = ctx.format_verse_body(
-									this,
-									this.settings.build_with_dynamic_verses,
-								)
+								let text = ctx.format_verse_body()
 								ctx.verses_text += text
 								if (
 									!(text.length === 0 && !this.settings.build_with_dynamic_verses)
@@ -575,7 +572,7 @@ export default class MyBible extends Plugin {
 						let chapter_note_name = ctx.format_chapter_name();
 		
 						// Chapter body
-						let note_body = ctx.format_chapter_body(this);
+						let note_body = ctx.format_chapter_body();
 		
 						// Save file
 						let file_path = book_path + "/" + chapter_note_name + ".md"
@@ -678,54 +675,73 @@ class BuildContext {
 		return name.replace(delimeter, "").slice(0,3);
 	}
 
-	format_book_name(plugin:MyBible, book:BookData, casing:string): string {
-		let delim = plugin.settings.book_name_delimiter
-		let book_name = this.to_case(book.name, casing, delim)
+	format_book_name(book:BookData|undefined=undefined): string {
+		if (book === undefined) {
+			book = this.book
+		}
+		let delim = this.plugin.settings.book_name_delimiter
+		let book_name = this.to_case(
+			book.name,
+			this.plugin.settings.book_name_capitalization,
+			delim
+		)
 
-		if (plugin.settings.book_name_abbreviated) {
+		if (this.plugin.settings.book_name_abbreviated) {
 			book_name = this.abbreviate_book_name(book_name, delim)
 		}
 
-		return plugin.settings.book_name_format
+		return this.plugin.settings.book_name_format
 			.replace(
 				/{order}/g,
 				String(this.book_order(book))
-					.padStart(2 * Number(plugin.settings.padded_order), "0")
+					.padStart(2 * Number(this.plugin.settings.padded_order), "0")
 			)
 			.replace(/{book}/g, book_name)
 			.replace(/{translation}/g, String(this.translation))
 	}
 
-	format_book_name_without_order(plugin:MyBible, book:BookData, casing:string): string {
-		let delim = plugin.settings.book_name_delimiter
-		let book_name = this.to_case(book.name, casing, delim)
+	format_book_name_without_order(
+		book:BookData|undefined=undefined,
+		casing:string|undefined=undefined,
+	): string {
+		if (book === undefined) {
+			book = this.book
+		}
+		if (casing === undefined) {
+			casing = this.plugin.settings.book_name_capitalization
+		}
+		let delim = this.plugin.settings.book_name_delimiter
+		let book_name = this.to_case(
+			book.name,
+			casing,
+			delim
+		)
 
-		if (plugin.settings.book_name_abbreviated) {
+		if (this.plugin.settings.book_name_abbreviated) {
 			book_name = this.abbreviate_book_name(book_name, delim)
 		}
 
 		return book_name
 	}
 	
-	format_chapter_body(plugin:MyBible): string {
-		let casing = plugin.settings.book_name_capitalization;
-		return plugin.settings.chapter_body_format
+	format_chapter_body(): string {
+		return this.plugin.settings.chapter_body_format
 			.replace(/{verses}/g, this.verses_text)
-			.replace(/{book}/g, this.format_book_name_without_order(plugin, this.book, casing))
+			.replace(/{book}/g, this.format_book_name_without_order(this.book))
 			.replace(
 				/{order}/g,
 				String(this.book_order(this.book))
-					.padStart(2 * Number(plugin.settings.padded_order), "0")
+					.padStart(2 * Number(this.plugin.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name())
 			.replace(/{chapter_index}/g, this.format_chapter_index_name(this.book))
 			.replace(/{last_chapter}/g, String(this.prev_chapter))
 			.replace(/{last_chapter_name}/g, this.format_chapter_name("last"))
-			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(plugin, this.prev_book, casing))
+			.replace(/{last_chapter_book}/g, this.format_book_name_without_order(this.prev_book))
 			.replace(/{next_chapter}/g, String(this.next_chapter))
 			.replace(/{next_chapter_name}/g, this.format_chapter_name("next"))
-			.replace(/{next_chapter_book}/g, this.format_book_name_without_order(plugin, this.next_book, casing))
+			.replace(/{next_chapter_book}/g, this.format_book_name_without_order(this.next_book))
 			.replace(/{first_chapter}/g, String(this.book.chapters.first()))
 			.replace(/{first_chapter_name}/g, this.format_chapter_name("first"))
 			.replace(/{final_chapter}/g, String(this.book.chapters.last()))
@@ -752,37 +768,37 @@ class BuildContext {
 		let chapter = custom_chapter
 		switch (tense) {
 			case "current": {
-				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = this.chapter
 				break;
 			}
 			case "last": {
-				book_name = this.format_book_name_without_order(this.plugin, this.prev_book, casing);
+				book_name = this.format_book_name_without_order(this.prev_book);
 				id = this.prev_book.id
 				chapter = this.prev_chapter
 				break;
 			}
 			case "next": {
-				book_name = this.format_book_name_without_order(this.plugin, this.next_book, casing);
+				book_name = this.format_book_name_without_order(this.next_book);
 				id = this.next_book.id
 				chapter = this.next_chapter
 				break;
 			}
 			case "first": {
-				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = this.book.chapters.first() || 1
 				break;
 			}
 			case "final": {
-				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = this.book.chapters.last() || 1
 				break;
 			}
 			case "custom": {
-				book_name = this.format_book_name_without_order(this.plugin, this.book, casing);
+				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = custom_chapter;
 				break;
@@ -809,15 +825,18 @@ class BuildContext {
 			.replace(/{translation}/g, String(this.translation))
 	}
 
-	format_verse_body(plugin:MyBible, build_with_dynamic_verses:boolean): string {
+	format_verse_body(
+		custom_text:string|undefined=undefined,
+	): string {
 		let book_name = this.format_book_name_without_order(
-			plugin,
 			this.book,
-			"current",
+			"name_case",
 		);
 
 		let verse_text = ""
-		if (build_with_dynamic_verses) {
+		if (custom_text !== undefined) {
+			verse_text = custom_text
+		} else if (this.plugin.settings.build_with_dynamic_verses) {
 			verse_text = "``` verse\n"
 				+ "{book_id} {chapter} {verse} \n"
 				+ "```"
@@ -847,7 +866,7 @@ class BuildContext {
 
 		}
 
-		return plugin.settings.verse_body_format
+		return this.plugin.settings.verse_body_format
 			.replace(/{verse_text}/g, verse_text)
 			.replace(/{verse}/g, String(this.verse))
 			.replace(/{book}/g, book_name)
@@ -855,7 +874,7 @@ class BuildContext {
 			.replace(
 				/{order}/g,
 				String(this.book_order(this.book))
-					.padStart(2 * Number(plugin.settings.padded_order), "0")
+					.padStart(2 * Number(this.plugin.settings.padded_order), "0")
 			)
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name())
@@ -864,25 +883,14 @@ class BuildContext {
 	}
 
 	format_chapter_index(book: BookData): string {
-		let book_name = this.format_book_name_without_order(
-			this.plugin,
-			book,
-			this.plugin.settings.book_name_capitalization,
-		);
+		let book_name = this.format_book_name_without_order(book)
 
 		let chapter_links = ""
 
 		// Format chapter links
 		for (let i = 0; i != book.chapters.length; i++) {
 			let chapter = book.get_chapter_number(i);
-			let link = this.plugin.settings.chapter_index_link_format
-				.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
-				.replace(/{book}/g, book_name)
-				.replace(/{book_index}/g, this.format_chapter_index_name(book))
-				.replace(/{translation}/g, String(this.translation))
-				.replace(/{chapter}/g, String(chapter))
-				.replace(/{chapter_name}/g, this.format_chapter_name("custom", chapter))
-			;
+			let link = this.format_chapter_index_element(book, book_name, chapter)
 			if (i != book.chapters.length-1) {
 				link += "\n"
 			}
@@ -899,16 +907,58 @@ class BuildContext {
 		;
 	}
 
-	format_chapter_index_name(book: BookData): string {
-		let book_name = this.format_book_name_without_order(
-			this.plugin,
-			book,
-			this.plugin.settings.book_name_capitalization,
-		);
+	format_chapter_index_element(
+		book:BookData|undefined=undefined,
+		book_name: string|undefined=undefined,
+		chapter: number|undefined=undefined,
+	): string {
+		if (book === undefined) {
+			book = this.book
+		}
+		if (book_name === undefined) {
+			book_name = this.format_book_name_without_order(book)
+		}
+		if (chapter === undefined) {
+			chapter = this.chapter
+		}
+		return this.plugin.settings.chapter_index_link_format
+			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{book}/g, book_name)
+			.replace(/{book_index}/g, this.format_chapter_index_name(book))
+			.replace(/{translation}/g, String(this.translation))
+			.replace(/{chapter}/g, String(chapter))
+			.replace(/{chapter_name}/g, this.format_chapter_name("custom", chapter))
+	}
+	
+	format_chapter_index_name(book: BookData|undefined=undefined): string {
+		if (book === undefined) {
+			book = this.book
+		}
+		let book_name = this.format_book_name_without_order(book)
 		return this.plugin.settings.chapter_index_name_format
 			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{book}/g, book_name)
 			.replace(/{translation}/g, String(this.translation))
+	}
+
+	format_index_element(book:BookData|BookId|undefined=undefined) {
+		let id = 0
+		if (book === undefined) {
+			id = this.book.id
+		} else if (book instanceof BookData) {
+			id = book.id
+		} else {
+			id = book
+		}
+		let book_name = this.format_book_name_without_order(this.books[id])
+
+		let link = this.plugin.settings.index_link_format
+			.replace(/{order}/g, String(this.book_order(Number(id))).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{book}/g, book_name)
+			.replace(/{book_index}/g, this.format_chapter_index_name(this.books[id]))
+			.replace(/{translation}/g, String(this.translation))
+			+ '\n'
+		return link
 	}
 	
 	format_index_name(): string {
@@ -922,19 +972,9 @@ class BuildContext {
 		let apocr_links = ""
 
 		// Format all book links
-		for (const ID in this.books) {
-			let book_name = this.format_book_name_without_order(
-				this.plugin,
-				this.books[ID],
-				this.plugin.settings.book_name_capitalization,
-			);
-
-			let link = this.plugin.settings.index_link_format
-				.replace(/{order}/g, String(this.book_order(Number(ID))).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
-				.replace(/{book}/g, book_name)
-				.replace(/{book_index}/g, this.format_chapter_index_name(this.books[ID]))
-				.replace(/{translation}/g, String(this.translation))
-				+ '\n'
+		for (const ID_ in this.books) {
+			const ID = Number(ID_)
+			let link = this.format_index_element(ID)
 
 			if (this.books[ID].id < 40) {
 				old_t_links += link 
@@ -1761,10 +1801,40 @@ class BollsLifeBibleAPI extends BibleAPI {
 
 class BuilderModal extends Modal {
 	plugin: MyBible
+	builder: BuildContext
+
+	description_updators: Record<string, ()=>void>
 
 	constructor(app: App, plugin: MyBible) {
 		super(app);
 		this.plugin = plugin;
+		this.description_updators = {}
+
+		this.builder = new BuildContext
+		this.builder.plugin = plugin
+		this.builder.translation = this.plugin.settings.translation
+		this.builder.verse = 35
+		this.builder.translation_texts = {
+			"translation": this.builder.translation,
+			"books": {
+				1: {1: ["UNREACHABLE"]},
+				22: {5: ["UNREACHABLE"]},
+				43: {11: [
+					"", "", "", "", "", "", "", "", "", "",
+					"", "", "", "", "", "", "", "", "", "",
+					"", "", "", "", "", "", "", "", "", "",
+					"Jesus wept.",
+				]}
+			}
+		}
+		this.builder.chapter = 11
+		this.builder.set_books({
+			1: new BookData(1, "Genesis", [1]),
+			22: new BookData(22, "Song of Solomon", [0, 0, 0, 0, 1]),
+			43: new BookData(43, "John", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 35]),
+		})
+		this.builder.set_book(this.builder.books[43])
+
 		this.render();
 	}
 
@@ -1816,6 +1886,7 @@ class BuilderModal extends Modal {
 				}
 				drop.onChange(async value => {
 					await this.plugin.settings.set_translation(value, this.plugin);
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 				drop.setValue(this.plugin.settings.translation);
@@ -1835,16 +1906,30 @@ class BuilderModal extends Modal {
 
 		this.renderChapterFormat(new Setting(containerEl));
 					
-		new Setting(containerEl)
+		let chapter_padding_setting = new Setting(containerEl)
 			.setName('Pad numbers')
-			.setDesc('When active, pads chapter numbers with extra zeros. For example, "Psalms 5" becomes "Psalms 005".')
 			.addToggle(toggle => toggle
 				.setTooltip("Toggle alignment padding of chapter numbers")
 				.setValue(this.plugin.settings.padded_chapter)
 				.onChange(async (value) => {
-					this.plugin.settings.padded_chapter = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.padded_chapter = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				}))
+		this.description_updators["chapter_padding"] = () => {
+			let desc = chapter_padding_setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText('When active, pads chapter numbers with extra zeros.')
+			desc.appendText('For example, "Psalms 5" would become "Psalms 005".')
+			desc.createEl("br")
+			desc.appendText('Current syntax: ')
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": this.builder.format_chapter_name(),
+				"cls": "u-pop",
+			})
+		}
 
 		// Verses
 
@@ -1925,6 +2010,8 @@ class BuilderModal extends Modal {
 		// After
 
 		this.renderBuildButton(new Setting(containerEl));
+
+		this.update_descriptions()
 	}
 
 	// Top renderers
@@ -1981,20 +2068,40 @@ class BuilderModal extends Modal {
 				.setTooltip("Reset value")
 				.onClick(async () => {
 					this.plugin.settings.book_name_format
-						= DEFAULT_SETTINGS.book_name_format;
-					this.renderBookFormat(setting);
-					await this.plugin.saveSettings();
+						= DEFAULT_SETTINGS.book_name_format
+					this.renderBookFormat(setting)
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 			.addText(text => text
 				.setPlaceholder("Example: " + DEFAULT_SETTINGS.book_name_format)
 				.setValue(this.plugin.settings.book_name_format)
 				.onChange(async (value) => {
-					this.plugin.settings.book_name_format = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.book_name_format = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
+		this.description_updators["book_name"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText('The format for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book. ')
+			desc.createEl("a", {
+				"text":"More about formatting",
+				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-name-format",
+			})
+			desc.appendText(". ")
+			desc.createEl("br", "")
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": "{0}".format(this.builder.format_book_name()),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderBookAbbreviation(setting: Setting) {
@@ -2007,6 +2114,7 @@ class BuilderModal extends Modal {
 				.setValue(this.plugin.settings.book_name_abbreviated)
 				.onChange(async (value) => {
 					this.plugin.settings.book_name_abbreviated = value;
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 			)
@@ -2024,8 +2132,9 @@ class BuilderModal extends Modal {
 				.addOption("upper_case", "Upper case")
 				.setValue(this.plugin.settings.book_name_capitalization)
 				.onChange(async (value) => {
-					this.plugin.settings.book_name_capitalization = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.book_name_capitalization = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
@@ -2035,7 +2144,6 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Name delimiter')
-			.setDesc('The characters separating words in book names, such as the spaces in "1 John" or "Song of Solomon".')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -2043,6 +2151,7 @@ class BuilderModal extends Modal {
 					this.plugin.settings.book_name_delimiter
 						= DEFAULT_SETTINGS.book_name_delimiter;
 					this.renderNameDelimeter(setting);
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 			)
@@ -2051,36 +2160,60 @@ class BuilderModal extends Modal {
 				.setValue(this.plugin.settings.book_name_delimiter)
 				.onChange(async (value) => {
 					this.plugin.settings.book_name_delimiter = value;
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 			)
 		;
+		this.description_updators["name_delimeter"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[22], 5)
+			desc.empty()
+			desc.appendText('The characters separating words in book names, such as the spaces in "1 John" or "Song of Solomon".');
+			desc.createEl("br")
+
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": "{0}".format(this.builder.format_book_name_without_order()),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderPaddedOrderNums(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Pad order numbers')
-			.setDesc('When Active, pads order numbers with extra zeros. For example, "1 Genesis" would become "01 Genesis" when active.')
 			.addToggle(toggle => toggle
 				.setTooltip("Toggle alignment padding of book order numbers")
 				.setValue(this.plugin.settings.padded_order)
 				.onChange(async (value) => {
-					this.plugin.settings.padded_order = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.padded_order = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
+		this.description_updators["padded_order"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[1], 1)
+			desc.empty()
+			desc.appendText('When Active, pads order numbers with extra zeros. ');
+			desc.createEl("br")
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": "{0}".format(this.builder.format_book_name()),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderBookOrdering(setting: Setting) {
-		let desc = new DocumentFragment()
-		desc.appendText("Choose how you want the books ordered in your Bible.");
-		desc.createEl("a", {"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Book-orderings", "text":" More about book ordering"})
 		setting.clear()
 		setting
 			.setName('Book ordering')
-			.setDesc(desc)
 			.addDropdown((x) => x
 				.addOption("christian", "Christian")
 				.addOption("hebraic", "Hebraic")
@@ -2091,6 +2224,17 @@ class BuilderModal extends Modal {
 				})
 			)
 		;
+
+		this.description_updators["book_ordering"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText("Choose how you want the books ordered in your Bible. ");
+			desc.createEl("a", {
+				"text": "More about book ordering",
+				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Book-orderings",
+			})
+		}
 	}
 
 	// Chapter renderers
@@ -2120,13 +2264,23 @@ class BuilderModal extends Modal {
 				)
 			)
 		;
+		this.description_updators["chapter_body"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText("Formats the contents of chapters. ")
+			desc.createEl("a", {
+				"text": "More on formatting",
+				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapters-body-format"
+			})
+			desc.appendText(".")
+		}
 	}
 
 	renderChapterName(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Name format')
-			.setDesc('The format for the names of chapters. For example, "{book} {chapter}" would become "Psalms 23".')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
@@ -2141,11 +2295,31 @@ class BuilderModal extends Modal {
 				.setPlaceholder(this.plugin.settings.chapter_name_format)
 				.setValue(this.plugin.settings.chapter_name_format)
 				.onChange(async (value) => {
-					this.plugin.settings.chapter_name_format = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.chapter_name_format = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
+		
+		this.description_updators["chapter_name"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText("The format for the names of chapters. ")
+			desc.createEl("a", {
+				"text":"More about formatting",
+				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapters-name-format",
+			})
+			desc.appendText(". ")
+			desc.createEl("br")
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": "{0}".format(this.builder.format_chapter_name()),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	// Verse renders
@@ -2170,10 +2344,31 @@ class BuilderModal extends Modal {
 				.setValue(this.plugin.settings.verse_body_format)
 				.onChange(async (value) => {
 					this.plugin.settings.verse_body_format = value;
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 			)
 		;
+		this.description_updators["verse_body"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText("Formats individual verses. ")
+			desc.createEl("a", {
+				"text":"More about formatting",
+				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#verse-format",
+			})
+			desc.appendText(". ")
+			desc.createEl("br")
+			desc.appendText("Current syntax: ")
+			for (const line of this.builder.format_verse_body("Jesus wept.").split("\n")) {
+				desc.createEl("br")
+				desc.createEl("b", {
+					"text": line,
+					"cls": "u-pop",
+				})
+			}
+		}
 	}
 
 	// Book index
@@ -2189,7 +2384,8 @@ class BuilderModal extends Modal {
 				.onClick(async () => {
 					this.plugin.settings.index_name_format
 						= DEFAULT_SETTINGS.index_name_format;
-					this.renderIndexName(setting);
+					this.renderIndexName(setting)
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 			)
@@ -2197,26 +2393,46 @@ class BuilderModal extends Modal {
 				.setPlaceholder(DEFAULT_SETTINGS.index_name_format)
 				.setValue(this.plugin.settings.index_name_format)
 				.onChange(async (value) => {
-					this.plugin.settings.index_name_format = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.index_name_format = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
+		this.description_updators["index_name"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[22], 5)
+			desc.empty()
+			desc.appendText('The format for the name of the book index. ')
+			desc.createEl("a", {
+				"text":"More about formatting",
+				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-index-name-format",
+			})
+			desc.appendText(". ")
+			desc.createEl("br")
+
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": this.builder.format_index_name(),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderIndexBookLink(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Book element format')
-			.setDesc('The format for each book element in a list.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
 					this.plugin.settings.index_link_format
-						= DEFAULT_SETTINGS.index_link_format;
-					this.renderIndexBookLink(setting);
-					await this.plugin.saveSettings();
+						= DEFAULT_SETTINGS.index_link_format
+					this.renderIndexBookLink(setting)
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 			.addText(text => text
@@ -2224,11 +2440,32 @@ class BuilderModal extends Modal {
 				.setValue(this.plugin.settings.index_link_format)
 				.onChange(async (value) => {
 					this.plugin.settings.index_link_format = value;
+					this.update_descriptions()
 					await this.plugin.saveSettings();
 				})
 			)
 		;
 		setting.setDisabled(!this.plugin.settings.index_enabled)
+
+		this.description_updators["index_element"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[22], 5)
+			desc.empty()
+			desc.appendText('The format for each book element in this index list. ')
+			desc.createEl("a", {
+				"text":"More about formatting",
+				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-element-format",
+			})
+			desc.appendText(". ")
+
+			desc.createEl("br")
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": "{0}".format(this.builder.format_index_element()),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderIndexBody(setting: Setting) {
@@ -2241,21 +2478,35 @@ class BuilderModal extends Modal {
 				.setTooltip("Reset value")
 				.onClick(async () => {
 					this.plugin.settings.index_format
-						= DEFAULT_SETTINGS.index_format;
-					this.renderIndexBody(setting);
-					await this.plugin.saveSettings();
+						= DEFAULT_SETTINGS.index_format
+					this.renderIndexBody(setting)
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 			.addTextArea(text => text
 				.setPlaceholder(DEFAULT_SETTINGS.index_format)
 				.setValue(this.plugin.settings.index_format)
 				.onChange(async (value) => {
-					this.plugin.settings.index_format = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.index_format = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
 		setting.setDisabled(!this.plugin.settings.index_enabled)
+
+		this.description_updators["index_body"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[22], 5)
+			desc.empty()
+			desc.appendText('The format for each book element in this index list. ')
+			desc.createEl("a", {
+				"text":"More about formatting",
+				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-index-body-format",
+			})
+			desc.appendText(". ")
+		}
 	}
 
 	// Chapter index
@@ -2264,60 +2515,102 @@ class BuilderModal extends Modal {
 		setting.clear()
 		setting
 			.setName('Name format')
-			.setDesc('The format for the name of the chapter index.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
 					this.plugin.settings.chapter_index_name_format
-						= DEFAULT_SETTINGS.chapter_index_name_format;
-					this.renderChapterIndexName(setting);
-					await this.plugin.saveSettings();
+						= DEFAULT_SETTINGS.chapter_index_name_format
+					this.renderChapterIndexName(setting)
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 			.addText(text => text
 				.setPlaceholder(DEFAULT_SETTINGS.chapter_index_name_format)
 				.setValue(this.plugin.settings.chapter_index_name_format)
 				.onChange(async (value) => {
-					this.plugin.settings.chapter_index_name_format = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.chapter_index_name_format = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
 		setting.setDisabled(!this.plugin.settings.index_enabled)
+
+		this.description_updators["chapter_index_name"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText('The format for the name of the chapter index. ')
+			desc.createEl("a", {
+				"text": "More on formatting",
+				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapter-indexes-name-format"
+			})
+			desc.appendText(".")
+
+			desc.createEl("br")
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": this.builder.format_chapter_index_name(),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderChapterIndexLink(setting: Setting) {
 		setting.clear()
 		setting
 			.setName('Chapter element format')
-			.setDesc('The format for each chapter element in a list.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
 				.setTooltip("Reset value")
 				.onClick(async () => {
 					this.plugin.settings.chapter_index_link_format
-						= DEFAULT_SETTINGS.chapter_index_link_format;
-					this.renderChapterIndexLink(setting);
-					await this.plugin.saveSettings();
+						= DEFAULT_SETTINGS.chapter_index_link_format
+					this.renderChapterIndexLink(setting)
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 			.addText(text => text
 				.setPlaceholder(DEFAULT_SETTINGS.chapter_index_link_format)
 				.setValue(this.plugin.settings.chapter_index_link_format)
 				.onChange(async (value) => {
-					this.plugin.settings.chapter_index_link_format = value;
-					await this.plugin.saveSettings();
+					this.plugin.settings.chapter_index_link_format = value
+					this.update_descriptions()
+					await this.plugin.saveSettings()
 				})
 			)
 		;
 		setting.setDisabled(!this.plugin.settings.index_enabled)
+
+		this.description_updators["chapter_index_element"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText('The format for each chapter element in a list. ')
+			desc.createEl("a", {
+				"text": "More on formatting",
+				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapter-indexes-book-element-format"
+			})
+			desc.appendText(".")
+
+			desc.createEl("br")
+			desc.appendText("Current syntax: ")
+			desc.createEl("br")
+			desc.createEl("b", {
+				"text": this.builder.format_chapter_index_element(),
+				"cls": "u-pop",
+			})
+		}
 	}
 
 	renderChapterIndexBody(setting: Setting) {
 		setting.clear()
 		setting
-			.setName('Chapter format')
+			.setName('Body format')
 			.setDesc('The format for the content of the chapter index.')
 			.addExtraButton(btn => btn
 				.setIcon("rotate-ccw")
@@ -2339,11 +2632,31 @@ class BuilderModal extends Modal {
 			)
 		;
 		setting.setDisabled(!this.plugin.settings.index_enabled)
+
+		this.description_updators["chapter_index_body"] = () => {
+			let desc = setting.descEl
+			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			desc.empty()
+			desc.appendText('The format for the content of the chapter index. ')
+			desc.createEl("a", {
+				"text": "More on formatting",
+				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapter-indexes-body-format"
+			})
+			desc.appendText(".")
+		}
 	}
 
+	
 	refresh() {
 		this.contentEl.empty()
 		this.render()
+	}
+
+	update_descriptions() {
+		for (const key of Object.keys(this.description_updators)) {
+			console.log("updating", key)
+			this.description_updators[key]()
+		}
 	}
 }
 
@@ -2771,7 +3084,7 @@ const DEFAULT_NAME_MAP: Record<string, BookId> = {
 	"Greek Additions to Esther": 81,
 	"3 Holy Children's Song": 82,
 	"Prayer of Manasseh": 83,
-	"Azariah": 88, // Jump in number
+	"Azariah": 88, // TODO: Fill in this jump in number
 }
 
 /// Maps book IDs to their hebraic ordering.
