@@ -754,12 +754,6 @@ class BuildContext {
 		if (format.length == 0) {
 			format = DEFAULT_SETTINGS.chapter_name_format;
 		}
-		let chapter_pad_by = 3;
-		if (this.book.chapters.length < 10) {
-			chapter_pad_by = 1;
-		} else if (this.book.chapters.length < 100) {
-			chapter_pad_by = 2;
-		}
 
 		let casing = this.plugin.settings.book_name_capitalization;
 		let delim = this.plugin.settings.book_name_delimiter;
@@ -809,6 +803,15 @@ class BuildContext {
 		if (chapter == null) {
 			throw new Error("Chapter is null");
 		}
+
+		let chapter_pad_by = 1
+		if (this.book.chapters.length > 99) {
+			chapter_pad_by = 3
+		} else if (this.book.chapters.length > 9) {
+			chapter_pad_by = 2
+		}
+		console.log(chapter_pad_by*Number(this.plugin.settings.padded_chapter), String(chapter)
+		.padStart(chapter_pad_by * Number(this.plugin.settings.padded_chapter), "0"))
 
 		return format
 			.replace(/{book}/g, book_name)
@@ -1829,7 +1832,7 @@ class BuilderModal extends Modal {
 		}
 		this.builder.chapter = 11
 		this.builder.set_books({
-			1: new BookData(1, "Genesis", [1]),
+			1: new BookData(1, "Genesis", [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
 			22: new BookData(22, "Song of Solomon", [0, 0, 0, 0, 1]),
 			43: new BookData(43, "John", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 35]),
 		})
@@ -1918,7 +1921,7 @@ class BuilderModal extends Modal {
 				}))
 		this.description_updators["chapter_padding"] = () => {
 			let desc = chapter_padding_setting.descEl
-			this.builder.set_book_and_chapter(this.builder.books[43], 11)
+			this.builder.set_book_and_chapter(this.builder.books[1], 1)
 			desc.empty()
 			desc.appendText('When active, pads chapter numbers with extra zeros.')
 			desc.appendText('For example, "Psalms 5" would become "Psalms 005".')
@@ -2654,7 +2657,6 @@ class BuilderModal extends Modal {
 
 	update_descriptions() {
 		for (const key of Object.keys(this.description_updators)) {
-			console.log("updating", key)
 			this.description_updators[key]()
 		}
 	}
