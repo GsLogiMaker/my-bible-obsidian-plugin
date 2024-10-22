@@ -10,9 +10,12 @@ import {
 	TFolder,
 	normalizePath,
 	requestUrl,
+	MarkdownPostProcessorContext,
 } from 'obsidian';
 
 import { E_CANCELED, Mutex } from 'async-mutex';
+import { match } from 'assert';
+import { randomBytes, randomInt } from 'crypto';
 
 const BUILD_END_TOAST = "Bible build finished!";
 const SELECTED_TRANSLATION_OPTION = "<Selected reading translation, {0}>"
@@ -196,13 +199,42 @@ function translation_to_display_name(translation:Translation):string {
 	;
 }
 
+function cyrb128(str:string): number {
+    let h1 = 1779033703, h2 = 3144134277,
+        h3 = 1013904242, h4 = 2773480762;
+    for (let i = 0, k; i < str.length; i++) {
+        k = str.charCodeAt(i);
+        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+    }
+    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+    h1 ^= (h2 ^ h3 ^ h4), h2 ^= h1, h3 ^= h1, h4 ^= h1;
+    return h1>>>0
+}
+
 
 export default class MyBible extends Plugin {
 	bible_api: BibleAPI
 	settings: MyBibleSettings
 	progress_notice: Notice | null
+	parser: MBInterpreter
 
 	async onload() {
+		this.parser = new MBInterpreter(this)
+		this.parser.add_command("random")
+			.arg("seed", "string", "")
+			.callback(async (args, el, mb) => {
+				let verse = await this.bible_api.pick_random_verse(args["seed"])
+				console.log(verse)
+				await mb.parser.render_verse(verse, el, false)
+			})
+		;
+
 		await this.loadSettings();
 
 		this.bible_api = new BollsLifeBibleAPI();
@@ -256,177 +288,9 @@ export default class MyBible extends Plugin {
 			}
 		});
 
-		this.registerMarkdownCodeBlockProcessor("verse", async (source, element, context) => {
-			const ref = source.trim().replace(/[:-]/g, " ").split(" ");
-
-			let book:string|null = null;
-			let book_id = -1;
-			let chapter = -1;
-			let verse = -1;
-			let verse_end = -1;
-			let maybe_translation: string | null = null;
-			let i = 0;
-
-			while (i != ref.length) {
-				// Compose book name
-				if (i == 0) {
-					// Always add first item, no matter what it is
-					book = (book || "") + ref[i];
-				} else {
-					// Only add items that are words, and not numbers
-					if (!is_alpha(ref[i])) {
-						break;
-					}
-					book += " " + ref[i]
-				}
-
-				i += 1;
-			}
-			if (is_numeric(book || "")) {
-				// Compose book_id
-				book_id = Number(book);
-				book = null;
-			}
-
-			if (i != ref.length && is_numeric(ref[i])) {
-				// Compose chapter
-				chapter = Number(ref[i]);
-				i += 1;
-			}
-
-			if (i != ref.length && is_numeric(ref[i])) {
-				// Compose verse
-				verse = Number(ref[i]);
-				i += 1;
-			}
-
-			if (i != ref.length && is_numeric(ref[i])) {
-				// Compose range
-				verse_end = Number(ref[i]);
-				i += 1;
-			}
-
-			if (i != ref.length && is_alphanumeric(ref[i])) {
-				// Compose translation
-				maybe_translation = ref[i];
-				i += 1;
-			}
-
-			let translation = maybe_translation || this.settings.reading_translation;
-			if (book !== null) {
-				book_id = await this.bible_api
-					.book_id(this.settings._built_translation||translation, book);
-			}
-			book = (await this.bible_api.get_book_data(translation, book_id)).name;
-			
-			let text = "";
-			if (book.length === 0) {
-				text = "[Book and chapter must be provided]";
-			} else if (chapter === -1) {
-				text = "[Chapter must be provided]";
-			} else if (verse === -1) {
-				// Whole chapter
-				let verses = await this.bible_api.get_chapter(
-					translation,
-					book_id,
-					chapter,
-				);
-				for (const verse_i_ of Object.keys(verses)) {
-					const verse_i = Number(verse_i_)
-					let verse = verses[verse_i];
-					text += "<sup>" + (verse_i) + "</sup> " + verse;
-					if (verse_i != Object.keys(verses).length+1) {
-						text += " ";
-						// text += "<br>";
-					}
-				}
-				if (text.length === 0) {
-					text = "<No text found for {1} {0} in translation {2}>"
-						.format(String(chapter), book, translation)
-				}
-			} else if (verse_end < verse) {
-				// Single verse
-				text = await this.bible_api.get_verse(
-					translation,
-					book_id,
-					chapter,
-					verse,
-				)
-				if (text.length === 0) {
-					text = "<No text found for {1} {0}:{2} in translation {3}>"
-						.format(String(chapter), book, String(verse), translation)
-				}
-			} else {
-				// Verse range
-				let verses = await this.bible_api.get_chapter(
-					translation,
-					book_id,
-					chapter,
-				);
-				let j = verse;
-				while (j < verse_end + 1 && j < Object.keys(verses).length) {
-					text += "<sup>" + j + "</sup> " + verses[j];
-					if (j != verse_end) {
-						text += "<br>";
-					}
-					j += 1;
-				}
-				if (text.length === 0) {
-					text = "<No text found for {1} {0}:{2}-{3} in translation {4}>"
-						.format(String(chapter), book, String(verse), String(verse_end), translation)
-				}
-			}
-
-			let span = element.createSpan({
-				text: "",
-			});
-
-			let tags = text.matchAll(
-				/(?:<\s*([\w]*)\s*>(.*?)<\s*\/\1\s*>)|<\s*(br|\/br|br\/)\s*>|(.+?(?:(?=<\s*[/\\\w]*\s*>)|$))/gs
-			);
-			for (let match of tags) {
-				let tag_type = match[1];
-				let tag_text = match[2];
-				let lone_tag_type = match[3];
-				let normal_text = match[4];
-
-				if (normal_text !== undefined) {
-					span.createSpan({
-						text: normal_text,
-					});
-				} else if (lone_tag_type === "br") {
-					span.createEl(lone_tag_type);
-				} else if (lone_tag_type === "br/" || lone_tag_type === "/br") {
-					span.createEl("br");
-					span.createSpan({
-						text: "\n",
-					});
-				} else if (lone_tag_type === "/J") {
-					/* Do nothing */
-				} else if (tag_type === "sup") {
-					span.createEl(tag_type, { text: tag_text });
-				} else if (tag_type === "sub") {
-					span.createEl(tag_type, { text: tag_text });
-				} else if (tag_type === "S") {
-					span.createEl(
-						"sub",
-						{ text: tag_text, attr: { style: "opacity: 0.5" } },
-					);
-				} else if (tag_type === "i") {
-					span.createEl(tag_type, { text: tag_text });
-				} else if (tag_type === "b") {
-					span.createEl(tag_type, { text: tag_text });
-				} else if (tag_type === "e") {
-					/// A quote from from elsewhere in the bible.
-					span.createEl("i").createEl("q", { text: tag_text });
-				} else {
-					span.createSpan(
-						{ text: "<{0}>{1}</{0}>".format(tag_type, tag_text) },
-					);
-				}
-			}
-
-		});
+		this.registerMarkdownCodeBlockProcessor("verse", async (source, el, ctx) =>
+			await this.parser.parse(source, el)
+		);
 
 
 		this.addSettingTab(new SettingsTab(this.app, this));
@@ -640,6 +504,400 @@ export default class MyBible extends Plugin {
 
 		await this.saveData(saving)
 	}
+
+	
+
+	
+
+	
+}
+
+class MBInterpreter {
+	plugin: MyBible
+	commands: MBCommand[]
+
+	constructor(plugin:MyBible) {
+		this.plugin = plugin
+		this.commands = []
+	}
+
+	add_command(
+		keyword:string,
+	): MBCommand {
+		let cmd = new MBCommand
+		this.commands.push(cmd)
+		cmd.keyword = keyword
+		return cmd
+	}
+
+	parse(source:string, el:HTMLElement) {
+		for (const LINE of source.split("\n")) {
+			this.render_line(LINE, el)
+		}
+	}
+
+	parse_cmd_args(
+		cmd:MBCommand,
+		args:string,
+	): Record<string, any> | MBParseError {
+		let result:Record<string, any> = {}
+		let remaining_args = args
+		let args_offset = Number(args.match(/\s*/)?.[0].length)
+		for (let i=0; args.slice(args_offset).length !== 0; i++) {
+			console.log("parsing '{0}'".format(args.slice(args_offset)))
+			let potential_offset = 0
+
+			// Match arg name
+			let arg_key = ""
+			let arg_name_match = args.slice(args_offset).match(/(\w*)\s*=/)
+			if (arg_name_match !== null) {
+				console.log("A", arg_name_match?.[0])
+				arg_key = String(arg_name_match?.[1])
+				potential_offset += arg_name_match?.[0].length
+				potential_offset += Number(args.slice(args_offset).match(/\s*/)?.[0].length)
+			} else {
+				console.log("B", i, cmd.arguments)
+				arg_key = cmd.arguments[i].key
+			}
+			let has_key = false
+			for (const CMD of cmd.arguments) {
+				if (arg_key === CMD.key) {
+					has_key = true
+					break
+				}
+			}
+			if (!has_key) {
+				return new MBParseError(
+					"No argument by name \"{0}\"".format(arg_key),
+					args,
+					args_offset,
+				)
+			}
+
+			// Match string
+			let str_match = args.slice(args_offset)
+				.match(/""|".*?[^\\]"|''|'.*?[^\\]'/)
+			if (str_match !== null) {
+				result[arg_key] = str_match[0].slice(1, -1)
+				potential_offset += str_match[0].length
+			}
+			console.log("result", result)
+			
+			if (Object.keys(result).length !== i+1) {
+				return new MBParseError(
+					"Failed to parse argument",
+					args,
+					args_offset,
+				)
+			}
+			if (Object.keys(result).length > cmd.arguments.length) {
+				return new MBParseError(
+					"Unexpected argument",
+					args,
+					args_offset,
+				)
+			}
+			if (typeof(result[arg_key]) !== cmd.arguments[i].type) {
+				return new MBParseError(
+					"Invalid argument",
+					args,
+					args_offset,
+				)
+			}
+			if (result[arg_key] === undefined) {
+				return new MBParseError(
+					"Absent required argument",
+					args,
+					args_offset,
+				)
+			}
+
+			
+			args_offset += potential_offset
+			args_offset += Number(args.slice(args_offset).match(/\s*/)?.[0].length)
+		}
+		return result
+	}
+
+	async render_mb_code(source:string, el:HTMLElement) {
+		let promises = []
+		for (const LINE of source.split("\n")) {
+			promises.push(this.render_line(LINE, el.createDiv()))
+		}
+		await Promise.all(promises)
+	}
+
+	async render_line(line:string, el: HTMLElement) {
+		let cmd_txt = line
+		let args_txt = ""
+		if (line.contains(" ")) {
+			cmd_txt = line.slice(0, line.indexOf(" "))
+			args_txt = line.slice(line.indexOf(" "))
+		}
+		let cmd = cmd_txt.toLowerCase().replace(/[_-]/g, "")
+		if (cmd.startsWith("/")) {
+			cmd = cmd.slice(1)
+			for (const CMD of this.commands) {
+				if (cmd === CMD.keyword) {
+					let args = this.parse_cmd_args(CMD, args_txt)
+					if (args instanceof MBParseError) {
+						args.render("/"+cmd, el)
+						return
+					}
+					await CMD.call(args, el, this.plugin)
+					return
+				}
+			}
+			new MBParseError(
+				"No command exists with this name".format(cmd),
+				line,
+				0
+			).render(undefined, el)
+		} else {
+			await this.render_verse(line, el)
+		}
+	}
+
+	async render_verse(line:string, el:HTMLElement, with_verse_numbers:boolean=true) {
+		let div = el.createDiv()
+		const ref = line.trim().replace(/[:-]/g, " ").split(" ");
+
+		let book:string|null = null;
+		let book_id = -1;
+		let chapter = -1;
+		let verse = -1;
+		let verse_end = -1;
+		let maybe_translation: string | null = null;
+		let i = 0;
+
+		while (i != ref.length) {
+			// Compose book name
+			if (i == 0) {
+				// Always add first item, no matter what it is
+				book = (book || "") + ref[i];
+			} else {
+				// Only add items that are words, and not numbers
+				if (!is_alpha(ref[i])) {
+					break;
+				}
+				book += " " + ref[i]
+			}
+
+			i += 1;
+		}
+		if (is_numeric(book || "")) {
+			// Compose book_id
+			book_id = Number(book);
+			book = null;
+		}
+
+		if (i != ref.length && is_numeric(ref[i])) {
+			// Compose chapter
+			chapter = Number(ref[i]);
+			i += 1;
+		}
+
+		if (i != ref.length && is_numeric(ref[i])) {
+			// Compose verse
+			verse = Number(ref[i]);
+			i += 1;
+		}
+
+		if (i != ref.length && is_numeric(ref[i])) {
+			// Compose range
+			verse_end = Number(ref[i]);
+			i += 1;
+		}
+
+		if (i != ref.length && is_alphanumeric(ref[i])) {
+			// Compose translation
+			maybe_translation = ref[i];
+			i += 1;
+		}
+
+		let translation = maybe_translation || this.plugin.settings.reading_translation;
+		if (book !== null) {
+			book_id = await this.plugin.bible_api
+				.book_id(this.plugin.settings._built_translation||translation, book);
+		}
+		book = (await this.plugin.bible_api.get_book_data(translation, book_id)).name;
+		
+		let text = "";
+		if (book.length === 0) {
+			text = "[Book and chapter must be provided]";
+		} else if (chapter === -1) {
+			text = "[Chapter must be provided]";
+		} else if (verse === -1) {
+			// Whole chapter
+			let verses = await this.plugin.bible_api.get_chapter(
+				translation,
+				book_id,
+				chapter,
+			);
+			for (const verse_i_ of Object.keys(verses)) {
+				const verse_i = Number(verse_i_)
+				let verse = verses[verse_i];
+				text += "<sup>" + (verse_i) + "</sup> " + verse;
+				if (verse_i != Object.keys(verses).length+1) {
+					text += " ";
+					// text += "<br>";
+				}
+			}
+			if (text.length === 0) {
+				text = "<No text found for {1} {0} in translation {2}>"
+					.format(String(chapter), book, translation)
+			}
+		} else if (verse_end < verse) {
+			// Single verse
+			text = await this.plugin.bible_api.get_verse(
+				translation,
+				book_id,
+				chapter,
+				verse,
+			)
+			if (text.length === 0) {
+				text = "<No text found for {1} {0}:{2} in translation {3}>"
+					.format(String(chapter), book, String(verse), translation)
+			}
+		} else {
+			// Verse range
+			let verses = await this.plugin.bible_api.get_chapter(
+				translation,
+				book_id,
+				chapter,
+			);
+			let j = verse;
+			while (j < verse_end + 1 && j < Object.keys(verses).length) {
+				if (with_verse_numbers) {
+					text += "<sup>" + j + "</sup> " + verses[j];
+					if (j != verse_end) {
+						text += "<br>";
+					}
+				} else {
+					text += verses[j] + "<br>"
+				}
+				j += 1;
+			}
+			if (text.length === 0) {
+				text = "<No text found for {1} {0}:{2}-{3} in translation {4}>"
+					.format(String(chapter), book, String(verse), String(verse_end), translation)
+			}
+		}
+
+		let span = div.createSpan({
+			text: "",
+		});
+
+		let tags = text.matchAll(
+			/(?:<\s*([\w]*)\s*>(.*?)<\s*\/\1\s*>)|<\s*(br|\/br|br\/)\s*>|(.+?(?:(?=<\s*[/\\\w]*\s*>)|$))/gs
+		);
+		for (let match of tags) {
+			let tag_type = match[1];
+			let tag_text = match[2];
+			let lone_tag_type = match[3];
+			let normal_text = match[4];
+
+			if (normal_text !== undefined) {
+				span.createSpan({
+					text: normal_text,
+				});
+			} else if (lone_tag_type === "br") {
+				span.createEl(lone_tag_type);
+			} else if (lone_tag_type === "br/" || lone_tag_type === "/br") {
+				span.createEl("br");
+				span.createSpan({
+					text: "\n",
+				});
+			} else if (lone_tag_type === "/J") {
+				/* Do nothing */
+			} else if (tag_type === "sup") {
+				span.createEl(tag_type, { text: tag_text });
+			} else if (tag_type === "sub") {
+				span.createEl(tag_type, { text: tag_text });
+			} else if (tag_type === "S") {
+				span.createEl(
+					"sub",
+					{ text: tag_text, attr: { style: "opacity: 0.5" } },
+				);
+			} else if (tag_type === "i") {
+				span.createEl(tag_type, { text: tag_text });
+			} else if (tag_type === "b") {
+				span.createEl(tag_type, { text: tag_text });
+			} else if (tag_type === "e") {
+				/// A quote from from elsewhere in the bible.
+				span.createEl("i").createEl("q", { text: tag_text });
+			} else {
+				span.createSpan(
+					{ text: "<{0}>{1}</{0}>".format(tag_type, tag_text) },
+				);
+			}
+		}
+	}
+}
+
+class MBCommand {
+	keyword: string = ""
+	arguments: MBArg[] = []
+	call: (args:Record<string, any>, el:HTMLElement, plugin: MyBible) => void
+
+	callback(
+		c: (args:Record<string, any>, el:HTMLElement, plugin: MyBible) => void
+	) {
+		this.call = c
+		return this
+	}
+
+	arg(key:string, type:string, default_value:any=undefined) {
+		let arg = new MBArg(key, type, default_value)
+		this.arguments.push(arg)
+		return this
+	}
+	opitonal_args(args: MBArg[]) {
+		this.arguments.concat(args)
+		return this
+	}
+}
+
+class MBArg {
+	key: string = ""
+	type: string = ""
+	default_value: any = undefined
+
+	constructor(key:string, type:string, default_value:any=undefined) {
+		this.key = key
+		this.type = type
+		this.default_value = default_value
+	}
+}
+
+class MBParseError {
+	name: string = ""
+	code: string = ""
+	offset: number = 0
+
+	constructor(name:string, message:string, offset:number) {
+		this.name = name
+		this.code = message
+		this.offset = offset
+	}
+
+	render(code_prefix:string="", el:HTMLElement) {
+		let err_block = el.createDiv()
+		err_block.setAttr("class", "callout")
+		err_block.setAttr("data-callout", "error")
+
+		let line_1 = code_prefix + this.code
+		let line_2 = "_".repeat(code_prefix.length+this.offset) + "^".repeat(this.code.length-this.offset)
+		err_block.appendText(this.name)
+		let block = err_block.createEl("div", {
+			"cls": "HyperMD-codeblock HyperMD-codeblock-bg cm-line",
+		})
+		block.setAttr("data-callout", "error")
+		block.appendText(line_1 + "\n")
+		block.createEl("br")
+		block.appendText(line_2)
+		return el
+	}
 }
 
 class BuildContext {
@@ -810,8 +1068,6 @@ class BuildContext {
 		} else if (this.book.chapters.length > 9) {
 			chapter_pad_by = 2
 		}
-		console.log(chapter_pad_by*Number(this.plugin.settings.padded_chapter), String(chapter)
-		.padStart(chapter_pad_by * Number(this.plugin.settings.padded_chapter), "0"))
 
 		return format
 			.replace(/{book}/g, book_name)
@@ -1222,10 +1478,10 @@ class SyncCacheItem {
 }
 
 class BibleAPI {
-	cache_clear_timer: Promise<null> | null = null;
-	cache_clear_timer_promise_err: (reason?: any) => void;
-	sync_cache: SyncCache = new SyncCache();
-	plugin: MyBible;
+	cache_clear_timer: Promise<null> | null = null
+	cache_clear_timer_promise_err: (reason?: any) => void
+	sync_cache: SyncCache = new SyncCache()
+	plugin: MyBible
 
 	async _get_book_data(translation: string, book_id:BookId): Promise<BookData> {
 		throw new Error("unimplemented")
@@ -1583,6 +1839,25 @@ class BibleAPI {
 
 	make_chapter_key(translation: string, book_id: number, chapter: Number) {
 		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
+	}
+
+	async pick_random_verse(seed:string|undefined=undefined): Promise<string> {
+		const PATH = normalizePath(this.plugin.manifest.dir + "/random_verses.json")
+		if (await this.plugin.app.vault.adapter.exists(PATH)) {
+			let random_verses = JSON.parse(
+				await this.plugin.app.vault.adapter.read(PATH)
+			)
+			
+			let random_index = 0
+			if (seed !== undefined) {
+				random_index = cyrb128(seed) % random_verses.length
+			} else {
+				random_index = randomInt(random_verses.length)
+			}
+			return random_verses[random_index]
+		}
+
+		return "Genesis 1:1"
 	}
 
 	/// Saves chapter data to local disk
@@ -3132,3 +3407,9 @@ const HEBRAIC_ORDER: Record<string, BookId> = {
 	"1 Chronicles": 38,
 	"2 Chronicles": 39,
 }
+
+const RANDOM_VERSE_POOL = [
+	"Geneses 1:1",
+	"John 3:16",
+	"Psalms 119:1",
+]
