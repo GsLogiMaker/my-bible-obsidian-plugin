@@ -645,9 +645,14 @@ class MBInterpreter {
 						return
 					}
 					await CMD.call(args, el, this.plugin)
-					break
+					return
 				}
 			}
+			new MBParseError(
+				"No command exists with this name".format(cmd),
+				line,
+				0
+			).render(undefined, el)
 		} else {
 			await this.render_verse(line, el)
 		}
