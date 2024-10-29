@@ -37,6 +37,13 @@ This plugin makes requests to [https://bolls.life/api/](https://bolls.life/api/)
 * `Download translation` - Opens a search menu of translations you can download. Downloaded translations are used only by dynamic verses for access to the Bible while offline.
 * `Clear local files` - Removes all local bible files, including downloaded translations.
 
+### Community
+Commune with other note-takers of the faith at the My Bible Discord server.
+
+<a href="https://discord.gg/TkvdwWQ7uB">
+    <img src="https://discord.com/api/guilds/1236015377373331478/widget.png?style=banner2" alt="Discord Banner 2"/>
+</a>
+
 ### Troubleshooting
 If you have issues with the plugin [please report them here](https://github.com/GsLogiMaker/my-bible-obsidian-plugin/issues/new).
 
