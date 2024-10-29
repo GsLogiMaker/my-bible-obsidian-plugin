@@ -23,6 +23,13 @@ for i, verse in enumerate(array):
 		if int(match.groups()[1]) - int(match.groups()[0]) > 2:
 			to_remove.append(i)
 			continue
+	if verse.startswith("Proverbs 7"):
+		# Remove references to Proverbs 7 to avoid awkward verses like
+		# "I have spread my couch with carpets of tapestry, with striped cloths
+		# of the yarn of Egypt."
+		# which are likely not what people want from random verses.
+		to_remove.append(i)
+		continue
 for i in reversed(to_remove):
 	array.pop(i)
 

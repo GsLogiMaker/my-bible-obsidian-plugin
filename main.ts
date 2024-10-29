@@ -230,7 +230,7 @@ export default class MyBible extends Plugin {
 			.arg("seed", "string", "")
 			.callback(async (args, el, mb) => {
 				let verse = await this.bible_api.pick_random_verse(args["seed"])
-				console.log(verse)
+				el.createEl("h3", {"text": verse})
 				await mb.parser.render_verse(verse, el, false)
 			})
 		;
@@ -350,7 +350,7 @@ export default class MyBible extends Plugin {
 	
 			// Get translation texts
 			ctx.translation_texts = await this.bible_api
-					.get_translation(ctx.translation);
+				.get_translation(ctx.translation);
 
 			// Remove empty chapters from books (HACK: This should be done in a better place, but this is where all the needed information is)
 			if (ctx.translation_texts !== undefined) {
@@ -504,11 +504,6 @@ export default class MyBible extends Plugin {
 
 		await this.saveData(saving)
 	}
-
-	
-
-	
-
 	
 }
 
