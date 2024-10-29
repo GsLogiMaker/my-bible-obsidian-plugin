@@ -11,6 +11,7 @@ import {
 	normalizePath,
 	requestUrl,
 	MarkdownPostProcessorContext,
+	MarkdownRenderer,
 } from 'obsidian';
 
 import { E_CANCELED, Mutex } from 'async-mutex';
