@@ -28,6 +28,7 @@
 		"typescript": "4.7.4"
 	},
 	"dependencies": {
-		"async-mutex": "^0.4.0"
+		"async-mutex": "^0.4.0",
+		"ohm-js": "^17.1.0"
 	}
 }

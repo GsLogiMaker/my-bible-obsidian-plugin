@@ -302,16 +302,35 @@ export default class MyBible extends Plugin {
 
 		this.registerMarkdownCodeBlockProcessor("mybible", async (source, el, ctx) => {
 			let code_context = {}
-			let display = await this.parser.process_bbcode_tag(source, code_context)
-			MarkdownRenderer.render(
-				this.app,
-				String(display ?? ""),
-				el,
-				"",
-				this,
-			)
-		});
+			let parsed = parse_mybible(source)
+			console.log(parsed)
+			if (parsed instanceof Error) {
+				MarkdownRenderer.render(
+					this.app,
+					"> [!ERROR] {0}\n> ```\n> {1}\n> ```".format(
+						parsed.name,
+						parsed.message
+							.replace(/\n/g, "\n> ")
+							.replace(/```/g, "")
+					),
+					el,
+					"",
+					this,
+				)
+				return
+			}
 
+			let text = ""
+			for (const X of parsed) {
+				if (X instanceof BBCodeTag) {
+					text += await X.toText(this.parser)
+				} else {
+					text += X
+				}
+			}
+			MarkdownRenderer.render(this.app, text, el, "", this)
+			// let display = await this.parser.process_bbcode_tag(source, code_context)
+		});
 
 		this.addSettingTab(new SettingsTab(this.app, this));
 	}
@@ -536,7 +555,7 @@ interface MBParseResult {
 	range_end: number
 }
 
-class MBInterpreter {
+export class MBInterpreter {
 	plugin: MyBible
 	commands: MBCommand[]
 	context: any
@@ -545,6 +564,22 @@ class MBInterpreter {
 		this.plugin = plugin
 		this.commands = []
 		this.context = {}
+	}
+
+	run_js(code:string, context:any) {
+		let call_result:any = ""
+		let run_code = new Function(
+			"__code__",
+			"return eval(__code__)"
+		)
+		try {
+			call_result = run_code.call(context, code)
+			if (String(call_result) == "[object Object]") {
+				call_result = JSON.stringify(call_result)
+			}
+		} catch(e) {
+			call_result = "\n> [!ERROR] " + String(e) + "\n"
+		}
 	}
 
 	parse_bbcode_tag(code:string): MBParseResult|undefined {
@@ -583,12 +618,12 @@ class MBInterpreter {
 				}
 				if (opened.length === 1) {
 					let open_match = opened[0]
-					let open_tag = open_match[1]
+					let openTag = open_match[1]
 					let open_args = open_match[3]
 
 					let range_start = open_match.index ?? 0
 					let range_end = offset + (match.index ?? 0) + tag.length
-					let content_start = range_start + open_tag.length
+					let content_start = range_start + openTag.length
 					let content_end = range_end - tag.length
 					return {
 						tag: tag_name,
@@ -615,18 +650,18 @@ class MBInterpreter {
 		}
 
 		let open_match = opened[0]
-		let open_tag = open_match[1]
-		let open_tag_name = open_match[2]
+		let openTag = open_match[1]
+		let openTag_name = open_match[2]
 			.toLocaleLowerCase()
 			.replace(/[_\-]/g, "")
 		let open_args = open_match[3]
 
 		let range_start = open_match.index ?? 0
 		let range_end = range_start + open_match[0].length
-		let content_start = range_start + open_tag.length
+		let content_start = range_start + openTag.length
 		let content_end = range_end
 		return {
-			tag: open_tag_name,
+			tag: openTag_name,
 			args: open_args,
 			content: code.slice(content_start, content_end),
 			remainder: "",
@@ -701,7 +736,6 @@ class MBInterpreter {
 			}
 		} catch (e) {
 			if (!(e instanceof MBGeneralError)) {
-				console.log(e)
 				let ge = new MBGeneralError(e.message)
 				ge.name = e.name
 				ge.stack = e.stack
@@ -1342,7 +1376,6 @@ class MBArgValueParseError extends MBTagError {
 		}
 		super(msg)
 		this.name = "Failed to parse value for argument"
-		console.log(String(this))
 	}
 }
 
