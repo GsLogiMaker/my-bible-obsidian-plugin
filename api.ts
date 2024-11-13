@@ -265,7 +265,7 @@ export module myBibleAPI {
 			}
 		}
 
-		return text
+		return getPlugin().bible_api.parse_html(text)
 	}
 
 }

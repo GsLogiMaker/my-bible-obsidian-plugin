@@ -786,33 +786,16 @@ class BuildContext {
 		if (custom_text !== undefined) {
 			verse_text = custom_text
 		} else if (this.plugin.settings.build_with_dynamic_verses) {
-			verse_text = "``` verse\n"
-				+ "{book_id} {chapter} {verse} \n"
+			verse_text = "``` mybible\n"
+				+ "[verse=\"{book_id} {chapter} {verse}\"]\n"
 				+ "```"
 		} else {
-			verse_text = this.translation_texts.books[this.book.id][this.chapter][this.verse]
+			verse_text = this.plugin.bible_api.parse_html(
+				this.translation_texts.books[this.book.id][this.chapter][this.verse]
+			)
 			if (verse_text === undefined) {
 				return ""
 			}
-			if (verse_text.contains("<")) {
-				verse_text = verse_text
-					// Replace <i>x with *x
-					.replace(/<\s*i\s*>(\s*)/g, (_, ws) => { return ws + "*" })
-					// Replace x</i> with x*
-					.replace(/(\s*)<\s*\/\s*i\s*>/g, (_, ws) => { return "*" + ws })
-					// Replace <b>x with **x
-					.replace(/<\s*b\s*>(\s*)/g, (_, ws) => { return ws + "**" })
-					// Replace x</b> with x**
-					.replace(/(\s*)<\s*\/\s*b\s*>/g, (_, ws) => { return "**" + ws })
-					// Replace <S>x with <sup>*x
-					.replace(/<\s*S\s*>(\s*)/g, (_, ws) => { return ws + "<sup>*" })
-					// Replace x</S> with x*</sup>
-					.replace(/(\s*)<\s*\/\s*S\s*>/g, (_, ws) => { return "*</sup>" + ws })
-					.replace(/<\s*br\s*\/?>/g, "\n") // Breakline tag
-					.replace(/<\/?\s*\w*\s*\/?>/g, "") // Any other tags
-				;
-			}
-
 		}
 
 		return this.plugin.settings.verse_body_format
@@ -1370,11 +1353,16 @@ class BibleAPI {
 				}
 
 				// Fetch chapter from the web
-				return await this._get_chapter(
+				let chapterData = await this._get_chapter(
 					translation,
 					book_id,
 					chapter,
-				);
+				)
+				for (const KEY_ of Object.keys(chapterData)) {
+					const KEY = Number(KEY_)
+					chapterData[KEY] = chapterData[KEY]
+				}
+				return chapterData
 			},
 		)
 
@@ -1531,6 +1519,26 @@ class BibleAPI {
 		return "{0}.{1}.{2}".format(translation, String(book_id), String(chapter));
 	}
 
+	parse_html(html:string):string {
+		html = html
+			// Replace <i>x with *x
+			.replace(/<\s*i\s*>(\s*)/g, (_, ws) => { return ws + "*" })
+			// Replace x</i> with x*
+			.replace(/(\s*)<\s*\/\s*i\s*>/g, (_, ws) => { return "*" + ws })
+			// Replace <b>x with **x
+			.replace(/<\s*b\s*>(\s*)/g, (_, ws) => { return ws + "**" })
+			// Replace x</b> with x**
+			.replace(/(\s*)<\s*\/\s*b\s*>/g, (_, ws) => { return "**" + ws })
+			// Replace <S>x with <sup>*x
+			.replace(/<\s*[S]\s*>(\s*)/g, (_, ws) => { return ws + "<sup>" })
+			// Replace x</S> with x*</sup>
+			.replace(/(\s*)<\s*\/\s*[S]\s*>/g, (_, ws) => { return "</sup>" + ws })
+			// Breakline tag
+			.replace(/<\s*br\s*\/?>/g, "\n")
+		;
+		return html
+	}
+
 	async pick_random_verse(seed:string|undefined=undefined): Promise<string> {
 		const PATH = normalizePath(this.plugin.manifest.dir + "/random_verses.json")
 		if (await this.plugin.app.vault.adapter.exists(PATH)) {
@@ -1616,7 +1624,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 			let texts:ChapterData = {}
 			for (const data of verse_data_list) {
 				let verse = data["verse"]
-				texts[verse] = data["text"]
+				texts[verse] = String(data["text"])
 			}
 
 			return texts
@@ -1646,6 +1654,8 @@ class BollsLifeBibleAPI extends BibleAPI {
 				let curr_book_id = -1;
 				let curr_chapter = -1;
 				for (const data of verses) {
+					let verse_text = String(data["text"])
+
 					let verse = data["verse"]
 	
 					curr_book_id = data["book"]
@@ -1658,7 +1668,7 @@ class BollsLifeBibleAPI extends BibleAPI {
 						bible.books[curr_book_id][curr_chapter] = {}
 					}
 	
-					bible.books[curr_book_id][curr_chapter][verse] = data["text"]
+					bible.books[curr_book_id][curr_chapter][verse] = verse_text
 					i += 1;
 				}
 				ok(null);
