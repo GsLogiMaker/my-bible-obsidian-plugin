@@ -6,27 +6,24 @@ export class PluginAccess {
 }
 
 export module myBibleAPI {
-	export module types {
-		export type BookID = number
-		export type ChapterID = number
-		export type VerseID = number
-		export type TranslationID = string
-
-		class ReferenceError extends Error {
-			constructor(message?:string) {
-				super(message)
-				this.name = "Scripture Reference Error"
-			}
+	export type BookID = number
+	export type ChapterID = number
+	export type VerseID = number
+	export type TranslationID = string
+	class ReferenceError extends Error {
+		constructor(message?:string) {
+			super(message)
+			this.name = "Scripture Reference Error"
 		}
 	}
 
 	/// A reference to a scripture verse or verses
 	export class Reference {
-		book: types.BookID
-		chapter: types.ChapterID
-		verseStart?: types.VerseID
-		verseEnd?: types.VerseID
-		translation?: types.TranslationID
+		book: BookID
+		chapter: ChapterID
+		verseStart?: VerseID
+		verseEnd?: VerseID
+		translation?: TranslationID
 
 		constructor(text:string) {
 			const ref = text.trim().replace(/[:-]/g, " ").split(" ")
@@ -91,14 +88,16 @@ export module myBibleAPI {
 						.bible_api
 						.book_id(book, maybe_translation ?? "YLT")
 			}
-			verse_end = verse_end ?? verse
 
 			// Errors
-			if ((verse_end ?? 0) < (verse ?? 0)) {
-				throw new ReferenceError(
-					"End of verse range must be after beginning"
-				)
-			} else if (book_id === undefined) {
+			if (verse !== undefined && verse_end !== undefined) {
+				if ((verse_end ?? 0) < (verse ?? 0)) {
+					throw new ReferenceError(
+						"End of verse range must be after beginning"
+					)
+				}
+			}
+			if (book_id === undefined) {
 				throw new ReferenceError(
 					"Invalid book name `{0}`".format(book??"")
 				)
@@ -111,11 +110,34 @@ export module myBibleAPI {
 			this.translation = maybe_translation
 		}
 
-		get_translation():string {
+		async getBookName():Promise<string> {
+			let bookData = await getPlugin()
+				.bible_api
+				.get_book_data(this.getTranslation(), this.book)
+			return bookData.name
+		}
+
+		getTranslation():TranslationID {
 			return this.translation ?? getPlugin().settings.translation
 		}
 
-		async body(
+		setBook(book:BookID):Reference {
+			this.book = book
+			return this
+		}
+
+		setVerseRange(start?:VerseID, end?:VerseID):Reference {
+			this.verseStart = start
+			this.verseEnd = end
+			return this
+		}
+		
+		setTranslation(translation?:TranslationID):Reference {
+			this.translation = translation
+			return this
+		}
+
+		async text(
 			withVerseNumbers?:boolean,
 			separator?:string,
 		):Promise<string> {
@@ -127,10 +149,7 @@ export module myBibleAPI {
 		}
 
 		async toString():Promise<string> {
-			let bookData = await getPlugin()
-				.bible_api
-				.get_book_data(this.get_translation(), this.book)
-			let text = bookData.name + " " + this.chapter
+			let text = await this.getBookName() + " " + this.chapter
 			if (this.verseStart !== undefined) {
 				text += ":" + String(this.verseStart)
 			}
@@ -144,10 +163,10 @@ export module myBibleAPI {
 		}
 	}
 	
-	export async function randRef(seed?:string):Promise<Reference> {
+	export async function randRef(seed?:string|number):Promise<Reference> {
 		let verse = await getPlugin()
 			.bible_api
-			.pick_random_verse(seed)
+			.pick_random_verse(String(seed))
 		return new Reference(verse)
 	}
 

@@ -304,7 +304,9 @@ export default class MyBible extends Plugin {
 		);
 
 		this.registerMarkdownCodeBlockProcessor("mybible", async (source, el, ctx) => {
-			let code_context = {}
+			let code_context = {
+				file: this.app.vault.getAbstractFileByPath(ctx.sourcePath)
+			}
 			let parsed = parse_mybible(source)
 			if (parsed instanceof Error) {
 				MarkdownRenderer.render(
