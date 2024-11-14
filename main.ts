@@ -2974,6 +2974,12 @@ class SettingsTab extends PluginSettingTab {
 				})
 			)
 		;
+		e_js_e.descEl.appendText(" For more about using Javascript in MyBible see the ")
+		e_js_e.descEl.createEl("a", {
+			text: "Javascript API",
+			href: "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Javascript-API",
+		})
+		e_js_e.descEl.appendText(".")
 
 		new Setting(containerEl)
 			.setDesc('Looking for build settings? They have been moved to the `Book builder` menu. You can access the menu via the `My Bible: Build Bible` command.')
