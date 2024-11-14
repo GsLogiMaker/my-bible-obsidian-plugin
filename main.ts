@@ -317,7 +317,7 @@ export default class MyBible extends Plugin {
 				MarkdownRenderer.render(
 					this.app,
 					"> [!WARNING] `verse` codeblocks are depricated\n"
-						+ "> Use `mybible` codeblocks instead. For more information visit [the wiki]({0})."
+						+ "> Rebuilding your Bible should resolve this issue. If you created this block yourself then use the `mybible` codeblock instead. For more information visit [the wiki]({0})."
 						.format("https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Codeblock-Processor"),
 					el,
 					"",
