@@ -271,8 +271,9 @@ export default class MyBible extends Plugin {
 			callback: async () => {
 				let modal = new QuickChangeTranslationeModal(this)
 				modal.translations = await this.bible_api.get_translations()
-				modal.onChose = translation => {
+				modal.onChose = async translation => {
 					this.settings.reading_translation = translation.abbreviated_name
+					await getPlugin().saveSettings()
 				}
 				modal.open()
 			}
