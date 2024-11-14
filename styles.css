@@ -26,12 +26,36 @@ If your plugin does not need CSS, delete this file.
 		margin-bottom: 0px;
 	}
 
+
+	.block-language-mybible {
+		/* Make mybible codeblocks mimic normal text in reading mode */
+		margin-top: 16px;
+		margin-bottom: 16px;
+		*:first-child {
+			margin-top: 0px;
+		}
+		*:last-child {
+			margin-bottom: 0px;
+		}
+	}
+	.cm-preview-code-block:has(.block-language-mybible) {
+		/* Reverse previous affects in writing mode */
+		margin-top: 16px;
+		margin-bottom: 16px;
+	}
+	.popover .block-language-mybible {
+		/* Reverse previous affects in popups */
+		margin-top: 0px;
+		margin-bottom: 0px;
+	}
+
+
 	.markdown-preview-view h6 {
 		/* Verse style general (reading mode) */
 		position: relative;
-		top: 26px;
+		top: 27px !important;
 		left: -22px;
-		margin-top: -28px;
+		margin-top: -33px !important;
 		margin-bottom: 0px;
 		margin-right: 3px;
 		line-height: 0px;
@@ -42,14 +66,14 @@ If your plugin does not need CSS, delete this file.
 		font-style: normal;;
 		color: var(--text-faint) !important;
 	}
-	.inline-embed .markdown-preview-view h6  {
+	.inline-embed .markdown-preview-view h6 {
 		/* Verse style specific to embedded links */
 		left: -1px;
 		margin-top: -22px;
 		margin-bottom: 30px;
 	}
-	.popover .markdown-preview-view h6  {
+	.popover .markdown-preview-view h6 {
 		/* Verse style specific to popovers from hovering over links */
-		top: 10px;
-		margin-top: 0px;
+		top: 10px !important;
+		margin-top: 0px !important;
 	}
