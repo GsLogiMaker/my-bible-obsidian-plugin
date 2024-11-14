@@ -27,26 +27,26 @@ const SELECTED_TRANSLATION_OPTION_KEY = "default"
 // Remember to rename these classes and interfaces!
 
 class MyBibleSettings {
-	translation: string;
+	translation: string
 	reading_translation: string
-	bible_folder: string;
+	bible_folder: string
 
-	store_locally: boolean;
+	store_locally: boolean
 
-	padded_order: boolean;
-	book_folders_enabled: boolean;
-	book_name_format: string;
-	book_name_delimiter: string;
-	book_name_capitalization: string;
-	book_name_abbreviated: boolean;
+	padded_order: boolean
+	book_folders_enabled: boolean
+	book_name_format: string
+	book_name_delimiter: string
+	book_name_capitalization: string
+	book_name_abbreviated: boolean
 
-	padded_chapter: boolean;
-	book_ordering: string;
-	chapter_name_format: string;
-	chapter_body_format: string;
+	padded_chapter: boolean
+	book_ordering: string
+	chapter_name_format: string
+	chapter_body_format: string
 
-	build_with_dynamic_verses: boolean;
-	verse_body_format: string;
+	build_with_dynamic_verses: boolean
+	verse_body_format: string
 
 	index_enabled: boolean
 	index_name_format: string
@@ -57,6 +57,8 @@ class MyBibleSettings {
 	chapter_index_name_format: string
 	chapter_index_format: string
 	chapter_index_link_format: string
+
+	enable_javascript_execution:boolean
 
 	_built_translation: string;
 
@@ -115,6 +117,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 		+ "{chapters}\n"
 	,
 	store_locally: false,
+	enable_javascript_execution: false,
 
 	_built_translation: "",
 
@@ -548,6 +551,11 @@ export default class MyBible extends Plugin {
 	}
 	
 	async runJS(code:string, context?:any):Promise<any> {
+		if (!this.settings.enable_javascript_execution) {
+			throw new Error(
+				"Can't execute javascript because `Enable Javascript excecution` is not enabled. Enable in MyBible settings."
+			)
+		}
 		let call_result = await async function() {
 			return eval("(async () => { {0} })()".format(code))
 		}.call(context)
@@ -2951,6 +2959,18 @@ class SettingsTab extends PluginSettingTab {
 				})
 				drop.setValue(this.plugin.settings.reading_translation);
 			})
+		;
+
+		let e_js_e = new Setting(containerEl)
+			.setName('Enable Javascript execution')
+			.setDesc('Enables the execution of Javascript code in `mybible` codeblocks.')
+			.addToggle(x => x
+				.setValue(this.plugin.settings.enable_javascript_execution)
+				.setTooltip("Enable or disable Javascript execution")
+				.onChange(v =>
+					this.plugin.settings.enable_javascript_execution = v
+				)
+			)
 		;
 
 		new Setting(containerEl)
