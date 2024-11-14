@@ -233,11 +233,20 @@ export function cyrb128(str:string): number {
     return h1>>>0
 }
 
+export function wait(seconds:number):Promise<void> {
+    return new Promise(function(resolve) {
+        setTimeout(resolve, seconds);
+    });
+}
+
+
+
 export default class MyBible extends Plugin {
 	bible_api: BibleAPI
 	settings: MyBibleSettings
 	progress_notice: Notice | null
 	legacyParser: legacy.VerseParser
+	depricationTimer: Promise<void>|undefined = undefined
 
 	static plugin:MyBible
 
@@ -303,9 +312,25 @@ export default class MyBible extends Plugin {
 			}
 		});
 
-		this.registerMarkdownCodeBlockProcessor("verse", async (source, el, ctx) =>
+		this.registerMarkdownCodeBlockProcessor("verse", async (source, el, ctx) =>{
+			if (this.depricationTimer === undefined) {
+				MarkdownRenderer.render(
+					this.app,
+					"> [!WARNING] `verse` codeblocks are depricated\n"
+						+ "> Use `mybible` codeblocks instead. For more information visit [the wiki]({0})."
+						.format("https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Codeblock-Processor"),
+					el,
+					"",
+					this,
+				)
+				this.depricationTimer = (async () => {
+					await wait(3)
+					this.depricationTimer = undefined
+					return
+				})()
+			}
 			await this.legacyParser.parse(source, el)
-		);
+		});
 
 		this.registerMarkdownCodeBlockProcessor("mybible", async (source, el, ctx) => {
 			let code_context = {
