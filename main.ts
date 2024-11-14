@@ -2943,7 +2943,7 @@ class SettingsTab extends PluginSettingTab {
 				})
 
 				for (const i in translations_list) {
-					let key = translations_list[i];
+					let key = translations_list[i]
 					drop.addOption(
 						key,
 						"{0} - {1} - {2}".format(
@@ -2955,9 +2955,9 @@ class SettingsTab extends PluginSettingTab {
 				}
 				drop.onChange(async value => {
 					this.plugin.settings.reading_translation = value;
-					await this.plugin.saveSettings();
+					await this.plugin.saveSettings()
 				})
-				drop.setValue(this.plugin.settings.reading_translation);
+				drop.setValue(this.plugin.settings.reading_translation)
 			})
 		;
 
@@ -2967,9 +2967,10 @@ class SettingsTab extends PluginSettingTab {
 			.addToggle(x => x
 				.setValue(this.plugin.settings.enable_javascript_execution)
 				.setTooltip("Enable or disable Javascript execution")
-				.onChange(v =>
+				.onChange(async v => {
 					this.plugin.settings.enable_javascript_execution = v
-				)
+					await this.plugin.saveSettings()
+				})
 			)
 		;
 

@@ -173,10 +173,10 @@ export class BBCodeTag {
 			let seed = String(this.args["seed"])
 			let verse_numbers = this.args["versenumbers"] ?? false
 			let separator = this.args["separator"] ?? " "
-			let version = this.args["version"]
-			
+			let translation = this.args["translation"]
+
 			let verse = await myBibleAPI.randRef(seed)
-			verse.setTranslation(version)
+			verse.setTranslation(translation)
 			let verse_text = await myBibleAPI.scripture(
 				verse ?? "1 1 1",
 				verse_numbers,
