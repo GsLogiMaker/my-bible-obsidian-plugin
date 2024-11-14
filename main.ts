@@ -239,8 +239,6 @@ export function wait(seconds:number):Promise<void> {
     });
 }
 
-
-
 export default class MyBible extends Plugin {
 	bible_api: BibleAPI
 	settings: MyBibleSettings
@@ -737,6 +735,7 @@ class BuildContext {
 			format = DEFAULT_SETTINGS.chapter_name_format;
 		}
 
+		let presentBook = this.book
 		let casing = this.plugin.settings.book_name_capitalization;
 		let delim = this.plugin.settings.book_name_delimiter;
 		let book_name = "";
@@ -744,30 +743,35 @@ class BuildContext {
 		let chapter = custom_chapter
 		switch (tense) {
 			case "current": {
+				presentBook = this.book
 				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = this.chapter
 				break;
 			}
 			case "last": {
+				presentBook = this.prev_book
 				book_name = this.format_book_name_without_order(this.prev_book);
 				id = this.prev_book.id
 				chapter = this.prev_chapter
 				break;
 			}
 			case "next": {
+				presentBook = this.next_book
 				book_name = this.format_book_name_without_order(this.next_book);
 				id = this.next_book.id
 				chapter = this.next_chapter
 				break;
 			}
 			case "first": {
+				presentBook = this.book
 				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = this.book.chapters.first() || 1
 				break;
 			}
 			case "final": {
+				presentBook = this.book
 				book_name = this.format_book_name_without_order(this.book);
 				id = this.book.id
 				chapter = this.book.chapters.last() || 1
@@ -787,9 +791,9 @@ class BuildContext {
 		}
 
 		let chapter_pad_by = 1
-		if (this.book.chapters.length > 99) {
+		if (presentBook.chapters.length > 99) {
 			chapter_pad_by = 3
-		} else if (this.book.chapters.length > 9) {
+		} else if (presentBook.chapters.length > 9) {
 			chapter_pad_by = 2
 		}
 
