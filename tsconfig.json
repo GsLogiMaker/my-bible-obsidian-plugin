@@ -19,10 +19,11 @@
     ]
   },
   "include": [
-    "**/*.ts"
-  ] ,
-    "typedocOptions": {
-      "entryPoints": ["api.ts"],
-      "out": "./_site"
-    }
+    "src/**/*.ts"
+, "main.ts", "src/mybible_parser.ts", "src/api.ts"  ] ,
+  "typedocOptions": {
+    "entryPoints": ["api.ts"],
+    "projectDocuments": ["docs/*.md"],
+    "out": "./_site"
+  }
 }
