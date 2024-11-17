@@ -31,9 +31,13 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
       
+      - name: Update npm
+        run: npm update
+      - name: Install Typedoc
+        run: npm install typedoc
+
       - name: Build Typedoc
         run:
-          npm install typedoc
           npx typedoc
         
       - name: Upload artifact
