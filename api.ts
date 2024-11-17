@@ -6,7 +6,7 @@ export module mb {
 	export type ChapterID = number
 	export type VerseID = number
 	export type TranslationID = string
-	class ReferenceError extends Error {
+	export class ReferenceError extends Error {
 		constructor(message?:string) {
 			super(message)
 			this.name = "Scripture Reference Error"
