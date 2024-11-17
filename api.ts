@@ -1,9 +1,5 @@
 
-import MyBible, { DEFAULT_NAME_MAP, getPlugin, is_alpha, is_alphanumeric, is_numeric } from "main";
-
-export class PluginAccess {
-	static plugin:MyBible
-}
+import { DEFAULT_NAME_MAP, getPlugin, is_alpha, is_alphanumeric, is_numeric } from "main";
 
 export module myBibleAPI {
 	export type BookID = number
@@ -17,7 +13,12 @@ export module myBibleAPI {
 		}
 	}
 
-	/// A reference to a scripture verse or verses
+	/** A reference to a scripture verse or verses
+	 * @example
+	 * ```ts
+	 * new Reference("Genesis", 1, 1)
+	 * ```
+	 */
 	export class Reference {
 		book: BookID
 		chapter: ChapterID
@@ -25,7 +26,36 @@ export module myBibleAPI {
 		verseEnd?: VerseID
 		translation?: TranslationID
 
-		constructor(text:string) {
+		constructor(
+			book:BookID|string,
+			chapter:ChapterID,
+			verseStart?:VerseID,
+			verseEnd?:VerseID,
+			translation?:TranslationID,
+		) {
+			if (typeof(book) === "string") {
+				this.book = DEFAULT_NAME_MAP[book]
+					?? getPlugin()
+						.bible_api
+						.book_id(book, translation ?? "YLT")
+			} else {
+				this.book = book
+			}
+			this.chapter = chapter
+			this.verseStart = verseStart
+			this.verseEnd = verseEnd
+			this.translation = translation
+		}
+		
+		/** Constructs a new {@link Reference} from text.
+		 * @example
+		 * ```ts
+		 * let ref = Reference.fromString("Genesis 1:1")
+		 * ```
+		 * @throws {@link ReferenceError} if ending verse is before starting verse.
+		 * @throws {@link ReferenceError} if the book name does not exist in the current translation (See {Reference.getTranslation}.)
+		 */
+		static fromString(text:string):Reference {
 			const ref = text.trim().replace(/[:-]/g, " ").split(" ")
 
 			let book:string|undefined = undefined
@@ -103,11 +133,13 @@ export module myBibleAPI {
 				)
 			}
 
-			this.book = book_id
-			this.chapter = chapter
-			this.verseStart = verse
-			this.verseEnd = verse_end
-			this.translation = maybe_translation
+			return new Reference(
+				book_id,
+				chapter,
+				verse,
+				verse_end,
+				maybe_translation,
+			)
 		}
 
 		async getBookName():Promise<string> {
@@ -163,15 +195,16 @@ export module myBibleAPI {
 		}
 	}
 	
+	/** Returns a random verse {@link Reference} from a pool */
 	export async function randRef(seed?:string|number):Promise<Reference> {
 		let verse = await getPlugin()
 			.bible_api
 			.pick_random_verse(String(seed))
-		return new Reference(verse)
+		return Reference.fromString(verse)
 	}
 
 	export function ref(reference:string):Reference {
-		return new Reference(reference)
+		return Reference.fromString(reference)
 	}
 
 	/// Returns the text of a bible verse
@@ -183,7 +216,7 @@ export module myBibleAPI {
 		withVerseNumbers = withVerseNumbers ?? false
 		separator = separator ?? " "
 		if (!(ref instanceof Reference)) {
-			ref = new Reference(ref)
+			ref = Reference.fromString(ref)
 		}
 		let version = ref.translation ?? getPlugin().settings.translation
 

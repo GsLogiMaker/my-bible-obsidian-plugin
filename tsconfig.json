@@ -20,5 +20,9 @@
   },
   "include": [
     "**/*.ts"
-  ]
+  ] ,
+    "typedocOptions": {
+      "entryPoints": ["api.ts"],
+      "out": "./_site"
+    }
 }

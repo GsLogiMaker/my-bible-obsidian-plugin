@@ -7,18 +7,15 @@ import {
 	Setting,
 	FuzzySuggestModal,
 	TFile,
-	TFolder,
 	normalizePath,
 	requestUrl,
-	MarkdownPostProcessorContext,
 	MarkdownRenderer,
 } from 'obsidian'
 
 import { E_CANCELED, Mutex } from 'async-mutex'
-import { match } from 'assert'
-import { randomBytes, randomInt } from 'crypto'
+import { randomInt } from 'crypto'
 import { BBCodeTag, legacy, parse_mybible } from 'mybible_parser'
-import { myBibleAPI, PluginAccess } from 'api'
+import { myBibleAPI,  } from 'api'
 
 const BUILD_END_TOAST = "Bible build finished!";
 const SELECTED_TRANSLATION_OPTION = "<Selected reading translation, {0}>"
