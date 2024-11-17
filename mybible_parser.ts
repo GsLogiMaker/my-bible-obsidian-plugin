@@ -1,4 +1,4 @@
-import { myBibleAPI } from "api"
+import { mb } from "api"
 import MyBible, { getPlugin, is_alpha, is_alphanumeric, is_numeric } from "main"
 
 const ohm = require('ohm-js')
@@ -153,7 +153,7 @@ export class BBCodeTag {
 		let text = ""
 
 		if (this.name === "verse") {
-			let verse_text = await myBibleAPI.scripture(
+			let verse_text = await mb.scripture(
 				this.args[""] ?? "1 1 1"
 			)
 			text += verse_text + await this.contentString(context)
@@ -175,9 +175,9 @@ export class BBCodeTag {
 			let separator = this.args["separator"] ?? " "
 			let translation = this.args["translation"]
 
-			let verse = await myBibleAPI.randRef(seed)
+			let verse = await mb.randRef(seed)
 			verse.setTranslation(translation)
-			let verse_text = await myBibleAPI.scripture(
+			let verse_text = await mb.scripture(
 				verse ?? "1 1 1",
 				verse_numbers,
 				separator,

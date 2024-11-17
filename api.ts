@@ -1,7 +1,7 @@
 
 import { DEFAULT_NAME_MAP, getPlugin, is_alpha, is_alphanumeric, is_numeric } from "main";
 
-export module myBibleAPI {
+export module mb {
 	export type BookID = number
 	export type ChapterID = number
 	export type VerseID = number

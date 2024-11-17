@@ -15,7 +15,7 @@ import {
 import { E_CANCELED, Mutex } from 'async-mutex'
 import { randomInt } from 'crypto'
 import { BBCodeTag, legacy, parse_mybible } from 'mybible_parser'
-import { myBibleAPI,  } from 'api'
+import { mb,  } from 'api'
 
 const BUILD_END_TOAST = "Bible build finished!";
 const SELECTED_TRANSLATION_OPTION = "<Selected reading translation, {0}>"
@@ -249,7 +249,7 @@ export default class MyBible extends Plugin {
 		MyBible.plugin = this
 
 		// @ts-ignore
-		globalThis["mb"] = myBibleAPI
+		globalThis["mb"] = mb
 
 		this.legacyParser = new legacy.VerseParser()
 
