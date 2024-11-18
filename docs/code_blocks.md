@@ -1,3 +1,7 @@
+---
+    title: Code Blocks
+---
+
 **🚧 ...This page is a work in progress... 🚧**
 
 # mybible
@@ -7,15 +11,15 @@ MyBible provides a custom templating language which resembles BBCode.
 ***
 
 ### `[verse]`
-Renders a verse in the codeblock.
+Converts to scriptural text in markdown.
 
-Usage:
+**Usage**
 ```
     ```mybible
     [verse="Genesis 1:1 WEB"]
     ```
 ```
-Processed result:
+**Result**
 ```
      In the beginning Elohim created the heavens and the earth.
 ```
@@ -23,44 +27,45 @@ Processed result:
 ***
 
 ### `[randomverse]`
-Renders a random verse in the codeblock.
+Converts to the scriptual text of a random verse in markdown.
 
-Usage:
+**Usage**
 ```
     ```mybible
-    [verseverse seed="10565" separator=" " verseNumbers=true translation="WEB"]
+    [randomverse seed="10565" separator=" " verseNumbers=true translation="WEB"]
     ```
 ```
 
 ***
 
 ### `[js]...[/js]`
-Runs Javascript code and renders any returned results.
+Converts to the returned result of running Javascript code.
 
-Usage:
+**Usage**
 ```
     ```mybible
     [js]this.myValue = "Hello"[/js]
     [js]return this.myValue + " world!"[/js]
+   
     ```
 ```
-Processed result:
+**Result**
 ```
      Hello world!
 ```
 
 # verse
 
-The `verse` codeblock is deprecated and will be removed in a future version of MyBible.
+The `verse` codeblock is the simplest way to fetch and render text from the scriptures.
 
-Example:
+**Example**
 ```
     ```verse
-    Genesis 1:1
+    Genesis 1:1 WEB
     ```
 ```
 
-Result:
+**Result**
 ```
-    In the beginning [...]
+    In the beginning Elohim created the heavens and the earth.
 ```

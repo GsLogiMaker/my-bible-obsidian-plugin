@@ -1,3 +1,7 @@
+---
+    title: Book Ordering
+---
+
 There are different traditions that dictate the order that books are laid out in the Bible. This page details the different orders that MyBible supports.
 
 | <h3>Christian</h3> | <h3>Hebraic</h3> |
