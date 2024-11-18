@@ -23,6 +23,27 @@ const SELECTED_TRANSLATION_OPTION_KEY = "default"
 
 // Remember to rename these classes and interfaces!
 
+class Version {
+	major:number = 1
+	minor:number = 0
+	patch:number = 0
+
+	constructor(ma:number, mi:number, pa:number) {
+		this.major = ma
+		this.minor = mi
+		this.patch = pa
+	}
+
+	static fromString(version:string):Version {
+		let parts = version.split(".")
+		return new Version(
+			Number(parts[0]),
+			Number(parts[1]),
+			Number(parts[2]),
+		)
+	}
+}
+
 class MyBibleSettings {
 	translation: string
 	reading_translation: string
@@ -58,6 +79,7 @@ class MyBibleSettings {
 	enable_javascript_execution:boolean
 
 	_built_translation: string;
+	_last_opened_version: Version|undefined
 
 	async set_translation(val: string, plugin: MyBible) {
 		throw new Error("Unimplemented")
@@ -117,6 +139,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	enable_javascript_execution: false,
 
 	_built_translation: "",
+	_last_opened_version: undefined,
 
 	set_translation: async function (val: string, plugin: MyBible): Promise<void> {
 		if (val === SELECTED_TRANSLATION_OPTION_KEY) {
@@ -246,6 +269,9 @@ export default class MyBible extends Plugin {
 	static plugin:MyBible
 
 	async onload() {
+		this.settings._last_opened_version = Version
+			.fromString(this.manifest.version)
+
 		MyBible.plugin = this
 
 		// @ts-ignore
