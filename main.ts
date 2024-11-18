@@ -15,7 +15,7 @@ import {
 import { E_CANCELED, Mutex } from 'async-mutex'
 import { randomInt } from 'crypto'
 import { BBCodeTag, legacy, parse_mybible } from 'mybible_parser'
-import { mb,  } from 'api'
+import { mb } from 'api'
 
 const BUILD_END_TOAST = "Bible build finished!";
 const SELECTED_TRANSLATION_OPTION = "<Selected reading translation, {0}>"
@@ -82,7 +82,18 @@ class MyBibleSettings {
 	_last_opened_version: Version|undefined
 
 	async set_translation(val: string, plugin: MyBible) {
-		throw new Error("Unimplemented")
+		if (val === SELECTED_TRANSLATION_OPTION_KEY) {
+			this.translation = val
+			return
+		}
+
+		let has_translation = false;
+		let translations = (await plugin.bible_api.get_translations());
+		if (!(val in translations)) {
+			this.translation = await plugin.bible_api.get_default_translation();
+		} else {
+			this.translation = val;
+		}
 	}
 }
 
@@ -140,22 +151,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 
 	_built_translation: "",
 	_last_opened_version: undefined,
-
-	set_translation: async function (val: string, plugin: MyBible): Promise<void> {
-		if (val === SELECTED_TRANSLATION_OPTION_KEY) {
-			this.translation = val
-			return
-		}
-
-		let has_translation = false;
-		let translations = (await plugin.bible_api.get_translations());
-		if (!(val in translations)) {
-			this.translation = await plugin.bible_api.get_default_translation();
-		} else {
-			this.translation = val;
-		}
-	}
-}
+} as MyBibleSettings
 
 export function getPlugin():MyBible {
 	return MyBible.plugin
@@ -250,7 +246,7 @@ export function cyrb128(str:string): number {
     h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
     h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
     h1 ^= (h2 ^ h3 ^ h4), h2 ^= h1, h3 ^= h1, h4 ^= h1;
-    return h1>>>0
+    return h1
 }
 
 export function wait(seconds:number):Promise<void> {
