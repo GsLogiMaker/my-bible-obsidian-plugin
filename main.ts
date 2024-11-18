@@ -7,18 +7,15 @@ import {
 	Setting,
 	FuzzySuggestModal,
 	TFile,
-	TFolder,
 	normalizePath,
 	requestUrl,
-	MarkdownPostProcessorContext,
 	MarkdownRenderer,
 } from 'obsidian'
 
 import { E_CANCELED, Mutex } from 'async-mutex'
-import { match } from 'assert'
-import { randomBytes, randomInt } from 'crypto'
+import { randomInt } from 'crypto'
 import { BBCodeTag, legacy, parse_mybible } from 'mybible_parser'
-import { myBibleAPI, PluginAccess } from 'api'
+import { mb,  } from 'api'
 
 const BUILD_END_TOAST = "Bible build finished!";
 const SELECTED_TRANSLATION_OPTION = "<Selected reading translation, {0}>"
@@ -252,7 +249,7 @@ export default class MyBible extends Plugin {
 		MyBible.plugin = this
 
 		// @ts-ignore
-		globalThis["mb"] = myBibleAPI
+		globalThis["mb"] = mb
 
 		this.legacyParser = new legacy.VerseParser()
 
@@ -671,13 +668,13 @@ class BuildContext {
 		}
 
 		return this.plugin.settings.book_name_format
+			.replace(/{translation}/g, String(this.translation))
+			.replace(/{book}/g, book_name)
 			.replace(
 				/{order}/g,
 				String(this.book_order(book))
 					.padStart(2 * Number(this.plugin.settings.padded_order), "0")
 			)
-			.replace(/{book}/g, book_name)
-			.replace(/{translation}/g, String(this.translation))
 	}
 
 	format_book_name_without_order(
@@ -706,7 +703,7 @@ class BuildContext {
 	
 	format_chapter_body(): string {
 		return this.plugin.settings.chapter_body_format
-			.replace(/{verses}/g, this.verses_text)
+			.replace(/{translation}/g, String(this.translation))
 			.replace(/{book}/g, this.format_book_name_without_order(this.book))
 			.replace(
 				/{order}/g,
@@ -726,7 +723,7 @@ class BuildContext {
 			.replace(/{first_chapter_name}/g, this.format_chapter_name("first"))
 			.replace(/{final_chapter}/g, String(this.book.chapters.last()))
 			.replace(/{final_chapter_name}/g, this.format_chapter_name("final"))
-			.replace(/{translation}/g, String(this.translation))
+			.replace(/{verses}/g, this.verses_text)
 	}
 
 	format_chapter_name(tense:string="current", custom_chapter:number|null = null): string {
@@ -736,8 +733,6 @@ class BuildContext {
 		}
 
 		let presentBook = this.book
-		let casing = this.plugin.settings.book_name_capitalization;
-		let delim = this.plugin.settings.book_name_delimiter;
 		let book_name = "";
 		let id = -1;
 		let chapter = custom_chapter
@@ -798,6 +793,7 @@ class BuildContext {
 		}
 
 		return format
+			.replace(/{translation}/g, String(this.translation))
 			.replace(/{book}/g, book_name)
 			.replace(
 				/{order}/g,
@@ -809,7 +805,6 @@ class BuildContext {
 				String(chapter)
 					.padStart(chapter_pad_by * Number(this.plugin.settings.padded_chapter), "0"),
 			)
-			.replace(/{translation}/g, String(this.translation))
 	}
 
 	format_verse_body(
@@ -837,8 +832,7 @@ class BuildContext {
 		}
 
 		return this.plugin.settings.verse_body_format
-			.replace(/{verse_text}/g, verse_text)
-			.replace(/{verse}/g, String(this.verse))
+			.replace(/{translation}/g, String(this.translation))
 			.replace(/{book}/g, book_name)
 			.replace(/{book_id}/g, String(this.book.id))
 			.replace(
@@ -848,8 +842,8 @@ class BuildContext {
 			)
 			.replace(/{chapter}/g, String(this.chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name())
-			.replace(/{final_chapter}/g, String(this.book.chapters))
-			.replace(/{translation}/g, String(this.translation))
+			.replace(/{verse_text}/g, verse_text)
+			.replace(/{verse}/g, String(this.verse))
 	}
 
 	format_chapter_index(book: BookData): string {
@@ -868,12 +862,12 @@ class BuildContext {
 		}
 
 		return this.plugin.settings.chapter_index_format
-			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
-			.replace(/{book}/g, book_name)
-			.replace(/{book_index}/g, this.format_chapter_index_name(book))
 			.replace(/{translation}/g, String(this.translation))
+			.replace(/{book}/g, book_name)
+			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{index}/g, this.format_index_name())
 			.replace(/{chapters}/g, chapter_links)
+			.replace(/{chapter_index}/g, this.format_chapter_index_name(book))
 		;
 	}
 
@@ -892,10 +886,9 @@ class BuildContext {
 			chapter = this.chapter
 		}
 		return this.plugin.settings.chapter_index_link_format
-			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
-			.replace(/{book}/g, book_name)
-			.replace(/{book_index}/g, this.format_chapter_index_name(book))
 			.replace(/{translation}/g, String(this.translation))
+			.replace(/{book}/g, book_name)
+			.replace(/{order}/g, String(this.book_order(book)).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			.replace(/{chapter}/g, String(chapter))
 			.replace(/{chapter_name}/g, this.format_chapter_name("custom", chapter))
 	}
@@ -923,10 +916,9 @@ class BuildContext {
 		let book_name = this.format_book_name_without_order(this.books[id])
 
 		let link = this.plugin.settings.index_link_format
-			.replace(/{order}/g, String(this.book_order(Number(id))).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
-			.replace(/{book}/g, book_name)
-			.replace(/{book_index}/g, this.format_chapter_index_name(this.books[id]))
 			.replace(/{translation}/g, String(this.translation))
+			.replace(/{book}/g, book_name)
+			.replace(/{order}/g, String(this.book_order(Number(id))).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
 			+ '\n'
 		return link
 	}
@@ -1815,6 +1807,18 @@ class BollsLifeBibleAPI extends BibleAPI {
 	}
 }
 
+const BOOK_ORDERING_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Book_Ordering"
+const CHAPTER_NAME_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:chapters--name-format"
+const CHAPTER_BODY_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:chapters--body-format"
+const VERSES_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:verses--format"
+const BOOK_NAME_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:books--name-format"
+const BOOK_INDEX_NAME_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:book-index--name-format"
+const BOOK_INDEX_ELEMENT_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:book-index--book-element-format"
+const BOOK_INDEX_BODY_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:book-index--body-format"
+const CHAPTER_INDEXS_NAME_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:chapter-indexes--name-format"
+const CHAPTER_INDEXS_ELEMENT_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:chapter-indexes--book-element-format"
+const CHAPTER_INDEXS_BODY_FORMAT_LINK = "https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Format_Settings.html#md:chapter-indexes--body-format"
+
 class BuilderModal extends Modal {
 	plugin: MyBible
 	builder: BuildContext
@@ -2107,7 +2111,7 @@ class BuilderModal extends Modal {
 			desc.appendText('The format for the names of the folders of each book of the bible. For example, "{order} {name}" would become "2 Exodus". Leave blank to not have folders for each book. ')
 			desc.createEl("a", {
 				"text":"More about formatting",
-				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-name-format",
+				"href":BOOK_NAME_FORMAT_LINK,
 			})
 			desc.appendText(". ")
 			desc.createEl("br", "")
@@ -2248,7 +2252,7 @@ class BuilderModal extends Modal {
 			desc.appendText("Choose how you want the books ordered in your Bible. ");
 			desc.createEl("a", {
 				"text": "More about book ordering",
-				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Book-orderings",
+				"href": BOOK_ORDERING_LINK,
 			})
 		}
 	}
@@ -2287,7 +2291,7 @@ class BuilderModal extends Modal {
 			desc.appendText("Formats the contents of chapters. ")
 			desc.createEl("a", {
 				"text": "More on formatting",
-				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapters-body-format"
+				"href": CHAPTER_BODY_FORMAT_LINK,
 			})
 			desc.appendText(".")
 		}
@@ -2324,8 +2328,8 @@ class BuilderModal extends Modal {
 			desc.empty()
 			desc.appendText("The format for the names of chapters. ")
 			desc.createEl("a", {
-				"text":"More about formatting",
-				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapters-name-format",
+				"text": "More about formatting",
+				"href": CHAPTER_NAME_FORMAT_LINK,
 			})
 			desc.appendText(". ")
 			desc.createEl("br")
@@ -2371,8 +2375,8 @@ class BuilderModal extends Modal {
 			desc.empty()
 			desc.appendText("Formats individual verses. ")
 			desc.createEl("a", {
-				"text":"More about formatting",
-				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#verse-format",
+				"text": "More about formatting",
+				"href": VERSES_FORMAT_LINK,
 			})
 			desc.appendText(". ")
 			desc.createEl("br")
@@ -2421,8 +2425,8 @@ class BuilderModal extends Modal {
 			desc.empty()
 			desc.appendText('The format for the name of the book index. ')
 			desc.createEl("a", {
-				"text":"More about formatting",
-				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-index-name-format",
+				"text": "More about formatting",
+				"href": BOOK_INDEX_NAME_FORMAT_LINK,
 			})
 			desc.appendText(". ")
 			desc.createEl("br")
@@ -2469,8 +2473,8 @@ class BuilderModal extends Modal {
 			desc.empty()
 			desc.appendText('The format for each book element in this index list. ')
 			desc.createEl("a", {
-				"text":"More about formatting",
-				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-element-format",
+				"text": "More about formatting",
+				"href": BOOK_INDEX_ELEMENT_FORMAT_LINK,
 			})
 			desc.appendText(". ")
 
@@ -2518,8 +2522,8 @@ class BuilderModal extends Modal {
 			desc.empty()
 			desc.appendText('The format for each book element in this index list. ')
 			desc.createEl("a", {
-				"text":"More about formatting",
-				"href":"https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#book-index-body-format",
+				"text": "More about formatting",
+				"href": BOOK_INDEX_BODY_FORMAT_LINK,
 			})
 			desc.appendText(". ")
 		}
@@ -2561,7 +2565,7 @@ class BuilderModal extends Modal {
 			desc.appendText('The format for the name of the chapter index. ')
 			desc.createEl("a", {
 				"text": "More on formatting",
-				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapter-indexes-name-format"
+				"href": CHAPTER_INDEXS_NAME_FORMAT_LINK
 			})
 			desc.appendText(".")
 
@@ -2609,7 +2613,7 @@ class BuilderModal extends Modal {
 			desc.appendText('The format for each chapter element in a list. ')
 			desc.createEl("a", {
 				"text": "More on formatting",
-				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapter-indexes-book-element-format"
+				"href": CHAPTER_INDEXS_ELEMENT_FORMAT_LINK,
 			})
 			desc.appendText(".")
 
@@ -2656,7 +2660,7 @@ class BuilderModal extends Modal {
 			desc.appendText('The format for the content of the chapter index. ')
 			desc.createEl("a", {
 				"text": "More on formatting",
-				"href": "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Formatting#chapter-indexes-body-format"
+				"href": CHAPTER_INDEXS_BODY_FORMAT_LINK,
 			})
 			desc.appendText(".")
 		}
@@ -3006,7 +3010,7 @@ class SettingsTab extends PluginSettingTab {
 		e_js_e.descEl.appendText(" For more about using Javascript in MyBible see the ")
 		e_js_e.descEl.createEl("a", {
 			text: "Javascript API",
-			href: "https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Javascript-API",
+			href: "https://gslogimaker.github.io/my-bible-obsidian-plugin/modules/api.mb",
 		})
 		e_js_e.descEl.appendText(".")
 
@@ -3119,6 +3123,93 @@ export const DEFAULT_NAME_MAP: Record<string, BookId> = {
 	"3 Holy Children's Song": 82,
 	"Prayer of Manasseh": 83,
 	"Azariah": 88, // TODO: Fill in this jump in number
+}
+
+export const BOOK_ID_TO_NAME: Record<BookId, string> = {
+	1: "Genesis",
+	2: "Exodus",
+	3: "Leviticus",
+	4: "Numbers",
+	5: "Deuteronomy",
+	6: "Joshua",
+	7: "Judges",
+	8: "Ruth",
+	9: "1 Samuel",
+	10: "2 Samuel",
+	11: "1 Kings",
+	12: "2 Kings",
+	13: "1 Chronicles",
+	14: "2 Chronicles",
+	15: "Ezra",
+	16: "Nehemiah",
+	17: "Esther",
+	18: "Job",
+	19: "Psalms",
+	20: "Proverbs",
+	21: "Ecclesiastes",
+	22: "Song of Solomon",
+	23: "Isaiah",
+	24: "Jeremiah",
+	25: "Lamentations",
+	26: "Ezekiel",
+	27: "Daniel",
+	28: "Hosea",
+	29: "Joel",
+	30: "Amos",
+	31: "Obadiah",
+	32: "Jonah",
+	33: "Micah",
+	34: "Nahum",
+	35: "Habakkuk",
+	36: "Zephaniah",
+	37: "Haggai",
+	38: "Zechariah",
+	39: "Malachi",
+	40: "Matthew",
+	41: "Mark",
+	42: "Luke",
+	43: "John",
+	44: "Acts",
+	45: "Romans",
+	46: "1 Corinthians",
+	47: "2 Corinthians",
+	48: "Galatians",
+	49: "Ephesians",
+	50: "Philippians",
+	51: "Colossians",
+	52: "1 Thessalonians",
+	53: "2 Thessalonians",
+	54: "1 Timothy",
+	55: "2 Timothy",
+	56: "Titus",
+	57: "Philemon",
+	58: "Hebrews",
+	59: "James",
+	60: "1 Peter",
+	61: "2 Peter",
+	62: "1 John",
+	63: "2 John",
+	64: "3 John",
+	65: "Jude",
+	66: "Revelation",
+	67: "1 Esdras",
+	68: "Tobit",
+	69: "Judith",
+	70: "Wisdom",
+	71: "Sirach",
+	72: "Epistle of Jeremiah",
+	73: "Baruch",
+	74: "1 Maccabees",
+	75: "2 Maccabees",
+	76: "3 Maccabees",
+	77: "2 Esdras",
+	78: "Susanna",
+	79: "Bel and Dragon",
+	80: "4 Maccabees",
+	81: "Greek Additions to Esther",
+	82: "3 Holy Children's Song",
+	83: "Prayer of Manasseh",
+	88: "Azariah", // TODO: Fill in this jump in number
 }
 
 /// Maps book IDs to their hebraic ordering.

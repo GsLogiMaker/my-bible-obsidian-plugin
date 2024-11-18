@@ -1,23 +1,33 @@
 
-import MyBible, { DEFAULT_NAME_MAP, getPlugin, is_alpha, is_alphanumeric, is_numeric } from "main";
+import { 
+	BOOK_ID_TO_NAME,
+	DEFAULT_NAME_MAP,
+	getPlugin,
+	is_alpha,
+	is_alphanumeric,
+	is_numeric,
+} from "main";
 
-export class PluginAccess {
-	static plugin:MyBible
-}
-
-export module myBibleAPI {
+export module mb {
 	export type BookID = number
 	export type ChapterID = number
 	export type VerseID = number
 	export type TranslationID = string
-	class ReferenceError extends Error {
+
+	/** An error when constructing a {@link Reference} */
+	export class ReferenceError extends Error {
 		constructor(message?:string) {
 			super(message)
 			this.name = "Scripture Reference Error"
 		}
 	}
 
-	/// A reference to a scripture verse or verses
+	/** A reference to a scripture chapter, verse, or verses
+	 * @example
+	 * ```ts
+	 * new Reference("Genesis", 1, 1)
+	 * ```
+	 */
 	export class Reference {
 		book: BookID
 		chapter: ChapterID
@@ -25,7 +35,33 @@ export module myBibleAPI {
 		verseEnd?: VerseID
 		translation?: TranslationID
 
-		constructor(text:string) {
+		constructor(
+			book:BookID|string,
+			chapter:ChapterID,
+			verseStart?:VerseID,
+			verseEnd?:VerseID,
+			translation?:TranslationID,
+		) {
+			this.setTranslation(translation) // translation must be set before book
+			this.setBook(book)
+			this.chapter = chapter
+			this.verseStart = verseStart
+			this.verseEnd = verseEnd
+		}
+		
+		/** Constructs a new {@link Reference} from text.
+		 * @example
+		 * ```ts
+		 * let ref = Reference.fromString("Genesis 1:1")
+		 * ```
+		 * @throws
+		 * - {@link ReferenceError} if no book is supplied or if no chapter is
+		 * supplied.
+		 * - {@link ReferenceError} if ending verse is before starting verse.
+		 * - {@link ReferenceError} if the book name does not exist in
+		 * the current translation (See {@link Reference.getTranslation}.)
+		 */
+		static fromString(text:string):Reference {
 			const ref = text.trim().replace(/[:-]/g, " ").split(" ")
 
 			let book:string|undefined = undefined
@@ -51,6 +87,13 @@ export module myBibleAPI {
 
 				i += 1;
 			}
+
+			if (book === undefined) {
+				throw new ReferenceError(
+					"Book must be defined"
+				)
+			}
+
 			if (is_numeric(book || "")) {
 				// Compose book_id
 				book_id = Number(book)
@@ -60,8 +103,6 @@ export module myBibleAPI {
 				// Compose chapter
 				chapter = Number(ref[i]);
 				i += 1;
-			} else {
-				chapter = 0
 			}
 
 			if (i != ref.length && is_numeric(ref[i])) {
@@ -102,41 +143,145 @@ export module myBibleAPI {
 					"Invalid book name `{0}`".format(book??"")
 				)
 			}
+			if (chapter === undefined) {
+				throw new ReferenceError(
+					"Chapter must be supplied",
+				)
+			}
 
-			this.book = book_id
-			this.chapter = chapter
-			this.verseStart = verse
-			this.verseEnd = verse_end
-			this.translation = maybe_translation
+			return new Reference(
+				book_id,
+				chapter,
+				verse,
+				verse_end,
+				maybe_translation,
+			)
 		}
 
+		/** Returns the English name of the book being referenced.
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("Malachi", 4)
+		 * ref.getBookName() === "Malachi"
+		 * ```
+		 */
 		async getBookName():Promise<string> {
+			return BOOK_ID_TO_NAME[this.book]
+		}
+
+		/** Returns the name of the book being referenced according to the
+		 * current translation. (See {@link Reference.getTranslation})
+		 * */
+		async getBookNameFromTranslation():Promise<string> {
 			let bookData = await getPlugin()
 				.bible_api
 				.get_book_data(this.getTranslation(), this.book)
 			return bookData.name
 		}
 
+		/** Returns the {@link TranslationID} being referenced.
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("Genesis", 1, 1, 2, "WEB")
+		 * ref.getTranslation() === "WEB"
+		 * ```
+		 * @returns If the translation is not defined in the reference,
+		 * then returns the reading translation from the user's settings.
+		 */
 		getTranslation():TranslationID {
 			return this.translation ?? getPlugin().settings.translation
 		}
 
-		setBook(book:BookID):Reference {
-			this.book = book
+		/** Sets the book being referenced.
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("Psalms", 1)
+		 * 
+		 * ref.setBook("1 John")
+		 * ref.toString() === "1 John 1"
+		 * 
+		 * ref.setBook(1)
+		 * ref.toString() === "Genesis 1"
+		 * ```
+		*/
+		setBook(book:string|BookID):Reference {
+			if (typeof(book) === "string") {
+				this.book = DEFAULT_NAME_MAP[book]
+					?? getPlugin()
+						.bible_api
+						.book_id(book, this.translation ?? "YLT")
+			} else {
+				this.book = book
+			}
 			return this
 		}
 
+		/** Sets the verse being referenced
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("Psalms", 119)
+		 * 
+		 * ref.setVerse(1)
+		 * ref.toString() === "Psalms 119:1"
+		 * 
+		 * ref.setVerse()
+		 * ref.toString() === "Psalms 119"
+		 * ```
+		*/
+		setVerse(start?:VerseID):Reference {
+			this.verseStart = start
+			this.verseEnd = undefined
+			return this
+		}
+
+		/** Sets the verse range being referenced.
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("Psalms", 119)
+		 * 
+		 * ref.setVerseRange(1)
+		 * ref.toString() === "Psalms 119:1"
+		 * 
+		 * ref.setVerseRange(2, 3)
+		 * ref.toString() === "Psalms 119:2-3"
+		 * 
+		 * ref.setVerseRange()
+		 * ref.toString() === "Psalms 119"
+		 * ```
+		 * @throws {@link ReferenceError} if `end` is defined but `start`
+		 * is undefined.
+		 */
 		setVerseRange(start?:VerseID, end?:VerseID):Reference {
+			if (start === undefined && end !== undefined) {
+				throw new ReferenceError(
+					"Can't set verse range end without setting verse range start."
+				)
+			}
 			this.verseStart = start
 			this.verseEnd = end
 			return this
 		}
 		
+		/** Sets the translation of the reference. */
 		setTranslation(translation?:TranslationID):Reference {
-			this.translation = translation
+			if (translation === undefined) {
+				this.translation = undefined
+			} else {
+				this.translation = translation.toUpperCase()
+			}
 			return this
 		}
 
+		/** Fetches the scripture being referenced as markdown.
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("Genesis", 1, 1)
+		 * let text = await ref.text()
+		 * text.startsWith("In the beginning") === true
+		 * ```
+		 * @see
+		 * - {@link scripture}
+		 */
 		async text(
 			withVerseNumbers?:boolean,
 			separator?:string,
@@ -148,6 +293,13 @@ export module myBibleAPI {
 			)
 		}
 
+		/** Converts this reference to a `string`.
+		 * @example
+		 * ```ts
+		 * let ref = new Reference("John", 33, 3, 4, "WEB")
+		 * String(ref) === "John 33:3-4 WEB"
+		 * ```
+		 */
 		async toString():Promise<string> {
 			let text = await this.getBookName() + " " + this.chapter
 			if (this.verseStart !== undefined) {
@@ -163,18 +315,38 @@ export module myBibleAPI {
 		}
 	}
 	
+	/** Returns a random verse {@link Reference} from a pool
+	 * @example
+	 * ```ts
+	 * let ref = await randRef("seed")
+	 * ```
+	*/
 	export async function randRef(seed?:string|number):Promise<Reference> {
 		let verse = await getPlugin()
 			.bible_api
 			.pick_random_verse(String(seed))
-		return new Reference(verse)
+		return Reference.fromString(verse)
 	}
 
-	export function ref(reference:string):Reference {
-		return new Reference(reference)
+	/** Creates a reference from a `string`.
+	 * @example
+	 * ```ts
+	 * let ref = newRef("Exodus 20")
+	 * ```
+	 */
+	export function newRef(reference:string):Reference {
+		return Reference.fromString(reference)
 	}
 
-	/// Returns the text of a bible verse
+	/** Fetches scripture by the given reference as markdown.
+	 * @example
+	 * ```ts
+	 * let text = scripture("John 11:35 WEB")
+	 * text === "Jesus wept."
+	 * ```
+	 * @see
+	 * - {@link Reference.text}
+	 */
 	export async function scripture(
 		ref:Reference|string,
 		withVerseNumbers?:boolean,
@@ -183,7 +355,7 @@ export module myBibleAPI {
 		withVerseNumbers = withVerseNumbers ?? false
 		separator = separator ?? " "
 		if (!(ref instanceof Reference)) {
-			ref = new Reference(ref)
+			ref = Reference.fromString(ref)
 		}
 		let version = ref.translation ?? getPlugin().settings.translation
 
