@@ -12,8 +12,8 @@ Formats names of chapter files.
 ### Supported tags
 - [`{translation}`](#translation)
 - [`{book}`](#book)
-- [`{chapter}`](#chapter)
 - [`{order}`](#order)
+- [`{chapter}`](#chapter)
 
 ## Chapters :: Body format
 Formats the text body of chapter files.
@@ -32,6 +32,8 @@ Formats the text body of chapter files.
 - [`{next_chapter_book}`](#next_chapter_book)
 - [`{first_chapter}`](#first_chapter)
 - [`{first_chapter_name}`](#first_chapter_name)
+- [`{final_chapter}`](#final_chapter)
+- [`{final_chapter_name}`](#final_chapter_name)
 - [`{verses}`](#verses)
 
 ## Verses :: Format
@@ -39,11 +41,12 @@ Formats text for individual verses.
 ### Supported tags
 - [`{translation}`](#translation)
 - [`{book}`](#book)
+- [`{book_id}`](#book_id)
 - [`{order}`](#order)
 - [`{chapter}`](#chapter)
 - [`{chapter_name}`](#chapter_name)
-- [`{verses}`](#verses)
 - [`{verse_text}`](#verse_text)
+- [`{verse}`](#verse)
 
 ## Books :: Name format
 Formats the names of the book folders.
@@ -95,8 +98,9 @@ Formats the contents of the chapter indexes.
 - [`{translation}`](#translation)
 - [`{book}`](#book)
 - [`{order}`](#order)
-- [`{chapter}`](#chapter)
-- [`{chapter_name}`](#chapter_name)
+- [`{index}`](#index)
+- [`{chapters}`](#chapters)
+- [`{chapter_index}`](#chapter_index)
 
 # Tags
 
@@ -104,6 +108,8 @@ Formats the contents of the chapter indexes.
 The translation your Bible is being built for.
 ## `{book}`
 The name of the current book. If `Abbreviate names` is active, then this will be the abbreviated book name.
+## `{book_id}`
+The ID for the current book.
 ## `{order}`
 The numeric order for the current book. For example, Genesis is the first book, so it's numeric order is `1`. Is affected by the `Book ordering` setting.
 ## `{chapter}`
@@ -132,6 +138,12 @@ The numeric order of the final chapter.
 The name of the final chapter. This can be used to create links.
 ## `{chapter_index}`
 The name of the index that maps all the chapters for the current book. This can be used to create links to the index.
+## `{chapter_index}`
+The filename of the current chapter index.
+## `{chapters}`
+A list of every chapter element in the current chapter index.
+## `{verse}`
+The numeric identifier of a verse.
 ## `{verses}`
 The text of all verses of the current chapter combined.
 ## `{old_testament}`
