@@ -80,7 +80,7 @@ Formats the names of the chapter indexes.
 - [`{book}`](#book)
 - [`{order}`](#order)
 
-## Chapter indexes :: Book element format
+## Chapter indexes :: Chapter element format
 Formats each element in the indexs' chapter lists.
 ### Supported tags
 - [`{translation}`](#translation)
