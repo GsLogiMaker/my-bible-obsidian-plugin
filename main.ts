@@ -80,20 +80,28 @@ class MyBibleSettings {
 
 	_built_translation: string;
 	_last_opened_version: Version|undefined
+	_plugin:MyBible
 
-	async set_translation(val: string, plugin: MyBible) {
+	constructor() {}
+
+	async set_translation(val: string) {
 		if (val === SELECTED_TRANSLATION_OPTION_KEY) {
 			this.translation = val
 			return
 		}
 
 		let has_translation = false;
-		let translations = (await plugin.bible_api.get_translations());
+		let translations = (await this._plugin.bible_api.get_translations());
 		if (!(val in translations)) {
-			this.translation = await plugin.bible_api.get_default_translation();
+			this.translation = await this._plugin.bible_api.get_default_translation();
 		} else {
 			this.translation = val;
 		}
+	}
+
+	async setLastOpenedVersion(version:Version) {
+		this._last_opened_version = version
+		this._plugin.saveSettings()
 	}
 }
 
@@ -226,6 +234,9 @@ export async function save_file(path: string, content: string) {
 }
 
 export function translation_to_display_name(translation:Translation):string {
+	if (translation.language === "") {
+		return translation.display_name
+	}
 	return "{0} - {1} - {2}"
 		.format(translation.language, translation.abbreviated_name, translation.display_name)
 	;
@@ -246,7 +257,7 @@ export function cyrb128(str:string): number {
     h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
     h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
     h1 ^= (h2 ^ h3 ^ h4), h2 ^= h1, h3 ^= h1, h4 ^= h1;
-    return h1
+    return h1 >>> 0
 }
 
 export function wait(seconds:number):Promise<void> {
@@ -265,22 +276,23 @@ export default class MyBible extends Plugin {
 	static plugin:MyBible
 
 	async onload() {
-		this.settings._last_opened_version = Version
-			.fromString(this.manifest.version)
-
 		MyBible.plugin = this
 
 		// @ts-ignore
 		globalThis["mb"] = mb
 
 		this.legacyParser = new legacy.VerseParser()
-
-		await this.loadSettings();
-
 		this.bible_api = new BollsLifeBibleAPI();
 		this.bible_api.plugin = this;
 
-		await this.settings.set_translation(this.settings.translation, this);
+		await this.loadSettings()
+		this.settings._plugin = this
+
+		this.settings.setLastOpenedVersion(
+			Version.fromString(this.manifest.version)
+		)
+
+		await this.settings.set_translation(this.settings.translation)
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
@@ -577,7 +589,11 @@ export default class MyBible extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			new MyBibleSettings,
+			DEFAULT_SETTINGS,
+			await this.loadData(),
+		)
 	}
 
 	async saveSettings() {
@@ -589,6 +605,7 @@ export default class MyBible extends Plugin {
 				delete saving[key]
 			}
 		}
+		delete saving["_plugin"]
 
 		await this.saveData(saving)
 	}
@@ -1232,7 +1249,7 @@ class BibleAPI {
 		throw new Error("unimplemented")
 	}
 
-	async get_default_translation(): Promise<string> {
+	async _get_default_translation(): Promise<string> {
 		throw new Error("unimplemented")
 	}
 
@@ -1465,7 +1482,7 @@ class BibleAPI {
 		)
 	}
 
-	async _get_default_translation(): Promise<string> {
+	async get_default_translation(): Promise<string> {
 		return await this.sync_cache.sync(
 			"get_default_translation",
 			() => this._get_default_translation(),
@@ -1643,9 +1660,6 @@ class BibleAPI {
 		}
 	}
 }
-
-type BookKey = string;
-type ChapterKey = string;
 
 type Translations = Record<string, Translation>;
 interface Translation {

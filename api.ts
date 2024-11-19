@@ -14,7 +14,7 @@ export module mb {
 	export type VerseID = number
 	export type TranslationID = string
 
-	/** An error when constructing a {@link Reference} */
+	/** An error when constructing a {@link Reference}. */
 	export class ReferenceError extends Error {
 		constructor(message?:string) {
 			super(message)
@@ -22,7 +22,13 @@ export module mb {
 		}
 	}
 
-	/** A reference to a scripture chapter, verse, or verses
+	/** Options for fetching scripture text. */
+	export interface ScriptureOptions {
+		withVerseNumbers?:boolean
+		separator?:string
+	}
+
+	/** A reference to a scripture chapter, verse, or verses.
 	 * @example
 	 * ```ts
 	 * new Reference("Genesis", 1, 1)
@@ -282,15 +288,10 @@ export module mb {
 		 * @see
 		 * - {@link scripture}
 		 */
-		async text(
-			withVerseNumbers?:boolean,
-			separator?:string,
-		):Promise<string> {
+		async text(options?:ScriptureOptions):Promise<string> {
 			return await scripture(
 				this,
-				withVerseNumbers,
-				separator,
-			)
+				options,			)
 		}
 
 		/** Converts this reference to a `string`.
@@ -349,15 +350,16 @@ export module mb {
 	 */
 	export async function scripture(
 		ref:Reference|string,
-		withVerseNumbers?:boolean,
-		separator?:string,
+		options?:ScriptureOptions,
 	):Promise<string> {
-		withVerseNumbers = withVerseNumbers ?? false
-		separator = separator ?? " "
+		if (options === undefined) {
+			options = {}
+		}
+		options.withVerseNumbers = options.withVerseNumbers ?? false
+		options.separator = options.separator ?? " "
 		if (!(ref instanceof Reference)) {
 			ref = Reference.fromString(ref)
 		}
-		let version = ref.translation ?? getPlugin().settings.translation
 
 		let translation = ref.translation
 			?? getPlugin().settings.reading_translation
@@ -415,13 +417,13 @@ export module mb {
 			);
 			let j = ref.verseStart;
 			while (j < ref.verseEnd + 1 && j < Object.keys(verses).length) {
-				if (withVerseNumbers) {
+				if (options.withVerseNumbers) {
 					text += "<sup>" + j + "</sup> " + verses[j];
 					if (j != ref.verseEnd) {
-						text += separator
+						text += options.separator
 					}
 				} else {
-					text += verses[j] + separator
+					text += verses[j] + options.separator
 				}
 				j += 1;
 			}
