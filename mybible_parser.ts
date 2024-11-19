@@ -171,17 +171,16 @@ export class BBCodeTag {
 
 		} else if (this.name === "randomverse") {
 			let seed = String(this.args["seed"])
-			let verse_numbers = this.args["versenumbers"] ?? false
+			let verse_numbers = this.args["withversenumbers"] ?? false
 			let separator = this.args["separator"] ?? " "
 			let translation = this.args["translation"]
 
 			let verse = await mb.randRef(seed)
 			verse.setTranslation(translation)
-			let verse_text = await mb.scripture(
-				verse ?? "1 1 1",
-				verse_numbers,
-				separator,
-			)
+			let verse_text = await mb.scripture(verse ?? "1 1 1", {
+				withVerseNumbers: verse_numbers,
+				separator: separator,
+			} )
 			text += verse_text + await this.contentString(context)
 
 		} else {
