@@ -321,7 +321,7 @@ export module mb {
 	/** Returns a random verse {@link Reference} from a pool
 	 * @example
 	 * ```ts
-	 * let ref = await randRef("seed")
+	 * let ref = randRef("seed")
 	 * ```
 	*/
 	export function randRef(seed?:string|number):Reference {
