@@ -271,10 +271,19 @@ export default class MyBible extends Plugin {
 	progress_notice: Notice | null
 	legacyParser: legacy.VerseParser
 	depricationTimer: Promise<void>|undefined = undefined
+	versePool:string[]
 
 	static plugin:MyBible
 
 	async onload() {
+		// Load random verses
+		const VERSE_POOL_PATH = normalizePath(
+			this.manifest.dir + "/random_verses.json"
+		)
+		this.versePool = JSON.parse(
+			await this.app.vault.adapter.read(VERSE_POOL_PATH)
+		)
+
 		MyBible.plugin = this
 
 		// @ts-ignore

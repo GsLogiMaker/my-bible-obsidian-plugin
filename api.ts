@@ -1,6 +1,8 @@
 
+import { randomInt } from "crypto";
 import { 
 	BOOK_ID_TO_NAME,
+	cyrb128,
 	DEFAULT_NAME_MAP,
 	getPlugin,
 	is_alpha,
@@ -171,7 +173,7 @@ export module mb {
 		 * ref.getBookName() === "Malachi"
 		 * ```
 		 */
-		async getBookName():Promise<string> {
+		getBookName():string {
 			return BOOK_ID_TO_NAME[this.book]
 		}
 
@@ -322,11 +324,16 @@ export module mb {
 	 * let ref = await randRef("seed")
 	 * ```
 	*/
-	export async function randRef(seed?:string|number):Promise<Reference> {
-		let verse = await getPlugin()
-			.bible_api
-			.pick_random_verse(String(seed))
-		return Reference.fromString(verse)
+	export function randRef(seed?:string|number):Reference {
+		seed = String(seed)
+
+		let random_index = 0
+		if (seed !== undefined) {
+			random_index = cyrb128(seed) % getPlugin().versePool.length
+		} else {
+			random_index = randomInt(getPlugin().versePool.length)
+		}
+		return newRef(getPlugin().versePool[random_index])
 	}
 
 	/** Creates a reference from a `string`.
