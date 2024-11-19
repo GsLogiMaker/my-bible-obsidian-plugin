@@ -66,6 +66,7 @@ Formats each elemenet in the index's book list.
 - [`{translation}`](#translation)
 - [`{book}`](#book)
 - [`{order}`](#order)
+- [`{chapter_index}`](#chapter_index)
 
 ## Book index :: Body format
 Formats the index's book list for each section (old/new testament) of the bible.
@@ -136,16 +137,16 @@ The name of the final chapter. This can be used to create links.
 The numeric order of the final chapter.
 ## `{final_chapter_name}`
 The name of the final chapter. This can be used to create links.
-## `{chapter_index}`
-The name of the index that maps all the chapters for the current book. This can be used to create links to the index.
-## `{chapter_index}`
-The filename of the current chapter index.
 ## `{chapters}`
 A list of every chapter element in the current chapter index.
 ## `{verse}`
 The numeric identifier of a verse.
 ## `{verses}`
 The text of all verses of the current chapter combined.
+## `{index}`
+The filename of the Bible index.
+## `{chapter_index}`
+The filename of the current chapter index.
 ## `{old_testament}`
 The list of links to the books of the Old Testament.
 ## `{new_testament}`

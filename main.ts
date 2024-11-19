@@ -135,7 +135,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	,
 	index_enabled: true,
 	index_name_format: "-- Bible --",
-	index_link_format: "- [[{book_index}|{book}]]",
+	index_link_format: "- [[{chapter_index}|{book}]]",
 	index_format: ""
 		+ "### Old testament\n"
 		+ "{old_testament}\n"
@@ -148,8 +148,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	chapter_index_name_format: "-- {book} --",
 	chapter_index_link_format: "- [[{chapter_name}|{chapter}]]",
 	chapter_index_format: ""
-		+ "##### "
-			+ "*[[{index}|Books]]*\n"
+		+ "##### *[[{index}|Books]]*\n"
 		+ "\n"
 		+ "### Chapters\n"
 		+ "{chapters}\n"
@@ -859,8 +858,8 @@ class BuildContext {
 		if (custom_text !== undefined) {
 			verse_text = custom_text
 		} else if (this.plugin.settings.build_with_dynamic_verses) {
-			verse_text = "``` mybible\n"
-				+ "[verse=\"{book_id} {chapter} {verse}\"]\n"
+			verse_text = "``` verse\n"
+				+ "{book_id} {chapter}:{verse}"
 				+ "```"
 		} else {
 			verse_text = this.plugin.bible_api.parse_html(
@@ -959,6 +958,7 @@ class BuildContext {
 			.replace(/{translation}/g, String(this.translation))
 			.replace(/{book}/g, book_name)
 			.replace(/{order}/g, String(this.book_order(Number(id))).padStart(2 * Number(this.plugin.settings.padded_order), "0"))
+			.replace(/{chapter_index}/g, this.format_chapter_index_name(this.books[id]))
 			+ '\n'
 		return link
 	}
