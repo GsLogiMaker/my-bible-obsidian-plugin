@@ -342,12 +342,13 @@ export default class MyBible extends Plugin {
 		});
 
 		this.registerMarkdownCodeBlockProcessor("verse", async (source, el, ctx) =>{
-			if (this.depricationTimer === undefined) {
+			const DEPRICATE_VERSE_BLOCK = false
+			if (DEPRICATE_VERSE_BLOCK && this.depricationTimer === undefined) {
 				MarkdownRenderer.render(
 					this.app,
 					"> [!WARNING] `verse` codeblocks are depricated\n"
 						+ "> Rebuilding your Bible should resolve this issue. If you created this block yourself then use the `mybible` codeblock instead. For more information visit [the wiki]({0})."
-						.format("https://github.com/GsLogiMaker/my-bible-obsidian-plugin/wiki/Codeblock-Processor"),
+						.format("https://gslogimaker.github.io/my-bible-obsidian-plugin/documents/Code_Blocks.html#md:verse-1"),
 					el,
 					"",
 					this,
@@ -1907,30 +1908,34 @@ class BuilderModal extends Modal {
 			.setName('Translation')
 			.setDesc('Builds your Bible according to the layout of this tranlsation. If "Build with dynamic verses" is active, then the text from this version will be built into your Bible.')
 			.addDropdown(async drop => {
-				drop.addOption(SELECTED_TRANSLATION_OPTION_KEY, SELECTED_TRANSLATION_OPTION.format(this.plugin.settings.reading_translation))
+				drop.addOption(
+					SELECTED_TRANSLATION_OPTION_KEY,
+					SELECTED_TRANSLATION_OPTION
+						.format(this.plugin.settings.reading_translation)
+				)
 
-				let translations = await this.plugin.bible_api.get_translations();
+				let translations = await this.plugin.bible_api.get_translations()
 				
-				let translations_list = [];
+				let translations_list = []
 				for (const key in translations) {
-					translations_list.push(key);
+					translations_list.push(key)
 				}
 				translations_list = translations_list.sort((a, b) => {
 					if (translations[a].language < translations[b].language) {
-						return -1;
+						return -1
 					}
 					if (translations[a].language > translations[b].language) {
-						return 1;
+						return 1
 					}
 
 					if (a < b) {
-						return -1;
+						return -1
 					}
 					if (a > b) {
-						return 1;
+						return 1
 					}
 
-					return 0;
+					return 0
 				})
 
 				for (const i in translations_list) {
@@ -1941,11 +1946,11 @@ class BuilderModal extends Modal {
 					);
 				}
 				drop.onChange(async value => {
-					await this.plugin.settings.set_translation(value, this.plugin);
+					await this.plugin.settings.set_translation(value)
 					this.update_descriptions()
-					await this.plugin.saveSettings();
+					await this.plugin.saveSettings()
 				})
-				drop.setValue(this.plugin.settings.translation);
+				drop.setValue(this.plugin.settings.translation)
 			})
 		;
 
