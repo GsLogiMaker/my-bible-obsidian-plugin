@@ -271,19 +271,10 @@ export default class MyBible extends Plugin {
 	progress_notice: Notice | null
 	legacyParser: legacy.VerseParser
 	depricationTimer: Promise<void>|undefined = undefined
-	versePool:string[]
 
 	static plugin:MyBible
 
 	async onload() {
-		// Load random verses
-		const VERSE_POOL_PATH = normalizePath(
-			this.manifest.dir + "/random_verses.json"
-		)
-		this.versePool = JSON.parse(
-			await this.app.vault.adapter.read(VERSE_POOL_PATH)
-		)
-
 		MyBible.plugin = this
 
 		// @ts-ignore
@@ -1619,22 +1610,7 @@ class BibleAPI {
 	}
 
 	async pick_random_verse(seed:string|undefined=undefined): Promise<string> {
-		const PATH = normalizePath(this.plugin.manifest.dir + "/random_verses.json")
-		if (await this.plugin.app.vault.adapter.exists(PATH)) {
-			let random_verses = JSON.parse(
-				await this.plugin.app.vault.adapter.read(PATH)
-			)
-			
-			let random_index = 0
-			if (seed !== undefined) {
-				random_index = cyrb128(seed) % random_verses.length
-			} else {
-				random_index = randomInt(random_verses.length)
-			}
-			return random_verses[random_index]
-		}
-
-		return "Genesis 1:1"
+		return mb.randRef(seed).toString()
 	}
 
 	/// Saves chapter data to local disk

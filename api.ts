@@ -9,6 +9,9 @@ import {
 	is_alphanumeric,
 	is_numeric,
 } from "main";
+import {
+	VERSE_POOL
+} from "random_verses"
 
 export module mb {
 	export type BookID = number
@@ -329,11 +332,11 @@ export module mb {
 
 		let random_index = 0
 		if (seed !== undefined) {
-			random_index = cyrb128(seed) % getPlugin().versePool.length
+			random_index = cyrb128(seed) % VERSE_POOL.length
 		} else {
-			random_index = randomInt(getPlugin().versePool.length)
+			random_index = randomInt(VERSE_POOL.length)
 		}
-		return newRef(getPlugin().versePool[random_index])
+		return newRef(VERSE_POOL[random_index])
 	}
 
 	/** Creates a reference from a `string`.
