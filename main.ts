@@ -120,7 +120,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	book_ordering: "christian",
 	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
-		+ "{verse_text}"
+		+ "{verse_text}\n"
 	,
 	chapter_body_format: "\n"
 		+ "##### "
