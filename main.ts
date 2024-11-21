@@ -120,7 +120,7 @@ const DEFAULT_SETTINGS: MyBibleSettings = {
 	book_ordering: "christian",
 	build_with_dynamic_verses: true,
 	verse_body_format: "###### {verse}\n"
-		+ "{verse_text}\n"
+		+ "{verse_text}"
 	,
 	chapter_body_format: "\n"
 		+ "##### "
@@ -859,7 +859,11 @@ class BuildContext {
 			verse_text = custom_text
 		} else if (this.plugin.settings.build_with_dynamic_verses) {
 			verse_text = "``` verse\n"
-				+ "{book_id} {chapter}:{verse}"
+				+ "{0} {1}:{2}\n".format(
+					String(this.book.id),
+					String(this.chapter),
+					String(this.verse),
+				)
 				+ "```"
 		} else {
 			verse_text = this.plugin.bible_api.parse_html(
