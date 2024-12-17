@@ -522,6 +522,7 @@ export default class MyBible extends Plugin {
 								ctx.verse = added_verse_count + 1
 								let text = ctx.format_verse_body()
 								if (text.length === 0) {
+									added_verse_count += 1
 									continue
 								}
 								ctx.verses_text += text
@@ -875,6 +876,10 @@ class BuildContext {
 			if (verse_text === undefined) {
 				return ""
 			}
+		}
+
+		if (verse_text === "") {
+			return ""
 		}
 
 		return this.plugin.settings.verse_body_format
