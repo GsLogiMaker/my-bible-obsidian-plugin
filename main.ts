@@ -521,6 +521,9 @@ export default class MyBible extends Plugin {
 							while (added_verse_count < verse) {
 								ctx.verse = added_verse_count + 1
 								let text = ctx.format_verse_body()
+								if (text.length === 0) {
+									continue
+								}
 								ctx.verses_text += text
 								if (
 									!(text.length === 0 && !this.settings.build_with_dynamic_verses)
@@ -867,7 +870,7 @@ class BuildContext {
 				+ "```"
 		} else {
 			verse_text = this.plugin.bible_api.parse_html(
-				this.translation_texts.books[this.book.id][this.chapter][this.verse]
+				this.translation_texts.books[this.book.id][this.chapter][this.verse] ?? ""
 			)
 			if (verse_text === undefined) {
 				return ""
