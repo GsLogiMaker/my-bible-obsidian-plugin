@@ -174,7 +174,7 @@ export function httpGet(theUrl: string): Promise<string> {
 			);
 			callSiteErr.name = "NetworkError";
 			reject(callSiteErr)
-		}, 10000)
+		}, 60000)
 	);
 
 	try {
